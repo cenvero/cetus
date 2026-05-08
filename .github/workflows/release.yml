@@ -42,7 +42,9 @@ jobs:
           ./scripts/prep-assets.sh darwin amd64
           ./scripts/prep-assets.sh darwin arm64
           ./scripts/prep-assets.sh windows amd64
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Run GoReleaser for stable release
+        if: ${{ !contains(github.ref_name, '-') }}
+        uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
@@ -50,6 +52,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+      - name: Run GoReleaser for prerelease
+        if: ${{ contains(github.ref_name, '-') }}
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --config .goreleaser.prerelease.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
 
   update-manifest:

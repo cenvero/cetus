@@ -11,6 +11,13 @@ deterministically through Chrome DevTools Protocol.
 curl -fsSL https://cetus.cenvero.org/install | sh
 ```
 
+Prerelease testers can install a channel-specific build:
+
+```sh
+curl -fsSL https://cetus.cenvero.org/install-beta | sh
+curl -fsSL https://cetus.cenvero.org/install-rc | sh
+```
+
 ## Usage
 
 ```sh
@@ -26,6 +33,9 @@ cetus version
 ```
 
 `cetus.html` is the recommended default filename. Any HTML path works.
+Self-updates stay on the installed release channel by default. Stable builds
+check stable releases, beta builds check beta releases, and RC builds check RC
+releases.
 
 If Cetus is installed with Homebrew, updates are handled by Homebrew:
 

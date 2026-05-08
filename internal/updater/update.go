@@ -21,6 +21,13 @@ import (
 
 const DefaultManifestURL = "https://cetus.cenvero.org/manifest.json"
 
+const (
+	ChannelAuto   = "auto"
+	ChannelStable = "stable"
+	ChannelBeta   = "beta"
+	ChannelRC     = "rc"
+)
+
 type Manifest struct {
 	GeneratedAt string                      `json:"generated_at"`
 	Channels    map[string]Channel          `json:"channels"`
@@ -47,6 +54,7 @@ type Binary struct {
 type CheckResult struct {
 	CurrentVersion    string
 	LatestVersion     string
+	Channel           string
 	Platform          string
 	ReleaseNotesURL   string
 	Binary            Binary
@@ -62,14 +70,19 @@ type ApplyResult struct {
 	InstalledPath string
 }
 
-func Check(ctx context.Context, currentVersion, manifestURL string) (*CheckResult, error) {
+func Check(ctx context.Context, currentVersion, manifestURL, channel string) (*CheckResult, error) {
 	if manifestURL == "" {
 		manifestURL = DefaultManifestURL
+	}
+	resolvedChannel, err := ResolveChannel(currentVersion, channel)
+	if err != nil {
+		return nil, err
 	}
 
 	homebrew, homebrewPath := IsHomebrewManaged()
 	result := &CheckResult{
 		CurrentVersion:  currentVersion,
+		Channel:         resolvedChannel,
 		Platform:        platformKey(),
 		HomebrewManaged: homebrew,
 		HomebrewPath:    homebrewPath,
@@ -80,32 +93,23 @@ func Check(ctx context.Context, currentVersion, manifestURL string) (*CheckResul
 		return nil, err
 	}
 
-	stable, ok := manifest.Channels["stable"]
-	if !ok || stable.Version == "" {
-		return nil, fmt.Errorf("no stable Cetus release is published yet")
+	channelInfo, binary, err := selectRelease(manifest, resolvedChannel, result.Platform)
+	if err != nil {
+		return nil, err
 	}
-	result.LatestVersion = stable.Version
-	result.ReleaseNotesURL = stable.ReleaseNotesURL
-
-	versionBinaries, ok := manifest.Binaries[stable.Version]
-	if !ok {
-		return nil, fmt.Errorf("manifest has no binaries for %s", stable.Version)
-	}
-	binary, ok := versionBinaries[result.Platform]
-	if !ok {
-		return nil, fmt.Errorf("manifest has no binary for %s on %s", stable.Version, result.Platform)
-	}
+	result.LatestVersion = channelInfo.Version
+	result.ReleaseNotesURL = channelInfo.ReleaseNotesURL
 	result.Binary = binary
 
-	cmp, comparable := compareVersions(currentVersion, stable.Version)
+	cmp, comparable := compareVersions(currentVersion, channelInfo.Version)
 	result.CurrentComparable = comparable
 	result.UpdateAvailable = !comparable || cmp < 0
 
 	return result, nil
 }
 
-func Apply(ctx context.Context, currentVersion, manifestURL string, force bool) (*ApplyResult, error) {
-	check, err := Check(ctx, currentVersion, manifestURL)
+func Apply(ctx context.Context, currentVersion, manifestURL, channel string, force bool) (*ApplyResult, error) {
+	check, err := Check(ctx, currentVersion, manifestURL, channel)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +163,51 @@ func Apply(ctx context.Context, currentVersion, manifestURL string, force bool) 
 	_ = os.Remove(backupPath)
 
 	return &ApplyResult{Check: check, Applied: true, InstalledPath: executable}, nil
+}
+
+func ResolveChannel(currentVersion, requested string) (string, error) {
+	requested = strings.ToLower(strings.TrimSpace(requested))
+	if requested == "" || requested == ChannelAuto {
+		return ChannelForVersion(currentVersion), nil
+	}
+	switch requested {
+	case ChannelStable, ChannelBeta, ChannelRC:
+		return requested, nil
+	default:
+		return "", fmt.Errorf("unsupported update channel %q; use stable, beta, rc, or auto", requested)
+	}
+}
+
+func ChannelForVersion(version string) string {
+	parsed, ok := parseSemVersion(version)
+	if !ok {
+		return ChannelStable
+	}
+	switch parsed.preName {
+	case ChannelBeta:
+		return ChannelBeta
+	case ChannelRC:
+		return ChannelRC
+	default:
+		return ChannelStable
+	}
+}
+
+func selectRelease(manifest *Manifest, channel, platform string) (Channel, Binary, error) {
+	channelInfo, ok := manifest.Channels[channel]
+	if !ok || channelInfo.Version == "" {
+		return Channel{}, Binary{}, fmt.Errorf("no %s Cetus release is published yet", channel)
+	}
+
+	versionBinaries, ok := manifest.Binaries[channelInfo.Version]
+	if !ok {
+		return Channel{}, Binary{}, fmt.Errorf("manifest has no binaries for %s", channelInfo.Version)
+	}
+	binary, ok := versionBinaries[platform]
+	if !ok {
+		return Channel{}, Binary{}, fmt.Errorf("manifest has no binary for %s on %s", channelInfo.Version, platform)
+	}
+	return channelInfo, binary, nil
 }
 
 func IsHomebrewManaged() (bool, string) {
@@ -355,45 +404,116 @@ func executableName() string {
 }
 
 func compareVersions(current, latest string) (int, bool) {
-	currentParts, ok := parseVersion(current)
+	currentVersion, ok := parseSemVersion(current)
 	if !ok {
 		return 0, false
 	}
-	latestParts, ok := parseVersion(latest)
+	latestVersion, ok := parseSemVersion(latest)
 	if !ok {
 		return 0, false
 	}
 
-	for i := 0; i < 3; i++ {
-		if currentParts[i] < latestParts[i] {
-			return -1, true
-		}
-		if currentParts[i] > latestParts[i] {
-			return 1, true
-		}
-	}
-	return 0, true
+	return currentVersion.compare(latestVersion), true
 }
 
 func parseVersion(version string) ([3]int, bool) {
-	version = strings.TrimSpace(strings.TrimPrefix(version, "v"))
-	version = strings.Split(version, "-")[0]
-	version = strings.Split(version, "+")[0]
-	parts := strings.Split(version, ".")
-	if len(parts) == 0 || len(parts) > 3 {
+	parsed, ok := parseSemVersion(version)
+	if !ok {
 		return [3]int{}, false
+	}
+	return parsed.core, true
+}
+
+type semVersion struct {
+	core    [3]int
+	pre     string
+	preName string
+	preNum  int
+}
+
+func parseSemVersion(version string) (semVersion, bool) {
+	version = strings.TrimSpace(strings.TrimPrefix(version, "v"))
+	version = strings.Split(version, "+")[0]
+	versionParts := strings.SplitN(version, "-", 2)
+	core := versionParts[0]
+	parts := strings.Split(core, ".")
+	if len(parts) == 0 || len(parts) > 3 {
+		return semVersion{}, false
 	}
 
 	var parsed [3]int
 	for i, part := range parts {
 		if part == "" {
-			return [3]int{}, false
+			return semVersion{}, false
 		}
 		n, err := strconv.Atoi(part)
 		if err != nil || n < 0 {
-			return [3]int{}, false
+			return semVersion{}, false
 		}
 		parsed[i] = n
 	}
-	return parsed, true
+
+	result := semVersion{core: parsed}
+	if len(versionParts) == 1 {
+		return result, true
+	}
+
+	result.pre = versionParts[1]
+	preParts := strings.Split(result.pre, ".")
+	result.preName = strings.ToLower(preParts[0])
+	if result.preName != ChannelBeta && result.preName != ChannelRC {
+		return semVersion{}, false
+	}
+	if len(preParts) > 1 {
+		n, err := strconv.Atoi(preParts[1])
+		if err != nil || n < 0 {
+			return semVersion{}, false
+		}
+		result.preNum = n
+	}
+	return result, true
+}
+
+func (v semVersion) compare(other semVersion) int {
+	for i := 0; i < 3; i++ {
+		if v.core[i] < other.core[i] {
+			return -1
+		}
+		if v.core[i] > other.core[i] {
+			return 1
+		}
+	}
+	if v.pre == "" && other.pre == "" {
+		return 0
+	}
+	if v.pre == "" {
+		return 1
+	}
+	if other.pre == "" {
+		return -1
+	}
+	if rankPrerelease(v.preName) < rankPrerelease(other.preName) {
+		return -1
+	}
+	if rankPrerelease(v.preName) > rankPrerelease(other.preName) {
+		return 1
+	}
+	if v.preNum < other.preNum {
+		return -1
+	}
+	if v.preNum > other.preNum {
+		return 1
+	}
+	return 0
+}
+
+func rankPrerelease(name string) int {
+	switch name {
+	case ChannelBeta:
+		return 1
+	case ChannelRC:
+		return 2
+	default:
+		return 0
+	}
 }

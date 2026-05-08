@@ -3,6 +3,7 @@ set -eu
 
 BASE_URL="${CETUS_BASE_URL:-https://cetus.cenvero.org}"
 MANIFEST_URL="${BASE_URL}/manifest.json"
+CHANNEL="${CETUS_CHANNEL:-stable}"
 INSTALL_DIR="${CETUS_INSTALL_DIR:-$HOME/.local/bin}"
 TMP_DIR="$(mktemp -d)"
 
@@ -20,6 +21,11 @@ need() {
 
 need curl
 need tar
+
+case "$CHANNEL" in
+  stable|beta|rc) ;;
+  *) echo "unsupported channel: $CHANNEL" >&2; exit 1 ;;
+esac
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -40,26 +46,43 @@ platform="${goos}-${goarch}"
 manifest="$TMP_DIR/manifest.json"
 curl -fsSL "$MANIFEST_URL" -o "$manifest"
 
-version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\(v[^"]*\)".*/\1/p' "$manifest" | head -n 1)"
+version="$(awk -v channel="\"$CHANNEL\"" '
+  $0 ~ channel "[[:space:]]*:" { in_channel=1 }
+  in_channel && /"version"[[:space:]]*:/ {
+    line=$0
+    sub(/^.*"version"[[:space:]]*:[[:space:]]*"/, "", line)
+    sub(/".*$/, "", line)
+    print line
+    exit
+  }
+' "$manifest")"
 if [ -z "$version" ]; then
-  echo "no stable Cetus release is published yet" >&2
+  echo "no $CHANNEL Cetus release is published yet" >&2
   exit 1
 fi
 
-url="$(awk -v platform="\"$platform\"" '
-  $0 ~ platform { in_platform=1 }
+url="$(awk -v version="\"$version\"" -v platform="\"$platform\"" '
+  /"binaries"[[:space:]]*:/ { in_binaries=1 }
+  in_binaries && $0 ~ version "[[:space:]]*:" { in_version=1 }
+  in_version && $0 ~ platform "[[:space:]]*:" { in_platform=1 }
   in_platform && /"url"/ {
-    gsub(/[",]/, "", $2)
-    print $2
+    line=$0
+    sub(/^.*"url"[[:space:]]*:[[:space:]]*"/, "", line)
+    sub(/".*$/, "", line)
+    print line
     exit
   }
 ' "$manifest")"
 
-sha="$(awk -v platform="\"$platform\"" '
-  $0 ~ platform { in_platform=1 }
+sha="$(awk -v version="\"$version\"" -v platform="\"$platform\"" '
+  /"binaries"[[:space:]]*:/ { in_binaries=1 }
+  in_binaries && $0 ~ version "[[:space:]]*:" { in_version=1 }
+  in_version && $0 ~ platform "[[:space:]]*:" { in_platform=1 }
   in_platform && /"sha256"/ {
-    gsub(/[",]/, "", $2)
-    print $2
+    line=$0
+    sub(/^.*"sha256"[[:space:]]*:[[:space:]]*"/, "", line)
+    sub(/".*$/, "", line)
+    print line
     exit
   }
 ' "$manifest")"
@@ -87,4 +110,4 @@ mkdir -p "$INSTALL_DIR"
 tar -xzf "$archive" -C "$TMP_DIR"
 install -m 0755 "$TMP_DIR/cetus" "$INSTALL_DIR/cetus"
 
-echo "installed cetus $version to $INSTALL_DIR/cetus"
+echo "installed cetus $version ($CHANNEL) to $INSTALL_DIR/cetus"

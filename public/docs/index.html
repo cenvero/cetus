@@ -88,7 +88,9 @@
       <div>
         <section id="install">
           <h2>Install</h2>
-          <pre><code>curl -fsSL https://cetus.cenvero.org/install | sh</code></pre>
+          <pre><code>curl -fsSL https://cetus.cenvero.org/install | sh
+curl -fsSL https://cetus.cenvero.org/install-beta | sh
+curl -fsSL https://cetus.cenvero.org/install-rc | sh</code></pre>
           <p>Cetus ships as one binary per platform. After install it does not need Node.js, npm, system Chrome, or system ffmpeg.</p>
         </section>
 
@@ -228,9 +230,10 @@ cetus preview cetus.html --no-open</code></pre>
 
         <section id="updates">
           <h2>Updates</h2>
-          <p>For direct binary installs, Cetus can check the release manifest and apply the latest stable release.</p>
+          <p>For direct binary installs, Cetus can check the release manifest and apply the latest release from the installed channel.</p>
           <pre><code>cetus update check
 cetus update apply</code></pre>
+          <p>Stable builds update from stable, beta builds update from beta, and RC builds update from rc unless <code>--channel</code> is set explicitly.</p>
           <p>The updater downloads the archive for your platform, verifies its SHA-256 from the manifest, extracts the <code>cetus</code> binary, and replaces the current executable.</p>
           <p>If Cetus is managed by Homebrew, self-update is disabled and Cetus prints the Homebrew command instead.</p>
           <pre><code>brew update && brew upgrade cenvero-cetus</code></pre>

@@ -24,12 +24,24 @@ manifest_file = pathlib.Path(manifest_path)
 manifest = json.loads(manifest_file.read_text())
 manifest["generated_at"] = now
 
-stable = manifest.setdefault("channels", {}).setdefault("stable", {})
-stable["version"] = version
-stable["release_date"] = now
-stable.setdefault("min_supported", version)
-stable["release_notes_url"] = f"https://github.com/cenvero/cetus/releases/tag/{version}"
-history = stable.setdefault("history", [])
+def release_channel(version):
+    base = version[1:] if version.startswith("v") else version
+    if "-" not in base:
+        return "stable"
+    prerelease = base.split("-", 1)[1].split("+", 1)[0].lower()
+    if prerelease == "beta" or prerelease.startswith("beta."):
+        return "beta"
+    if prerelease == "rc" or prerelease.startswith("rc."):
+        return "rc"
+    raise SystemExit(f"unsupported prerelease channel in {version}; use beta or rc")
+
+channel_name = release_channel(version)
+channel = manifest.setdefault("channels", {}).setdefault(channel_name, {})
+channel["version"] = version
+channel["release_date"] = now
+channel.setdefault("min_supported", version)
+channel["release_notes_url"] = f"https://github.com/cenvero/cetus/releases/tag/{version}"
+history = channel.setdefault("history", [])
 if version not in history:
     history.insert(0, version)
 
@@ -54,4 +66,3 @@ manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
 PY
 
 echo "updated ${MANIFEST}"
-

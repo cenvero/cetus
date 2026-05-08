@@ -161,6 +161,7 @@ func newPreviewCommand() *cobra.Command {
 
 func newUpdateCommand() *cobra.Command {
 	var manifestURL string
+	var channel string
 
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -168,12 +169,13 @@ func newUpdateCommand() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVar(&manifestURL, "manifest-url", updater.DefaultManifestURL, "release manifest URL")
-	cmd.AddCommand(newUpdateCheckCommand(&manifestURL))
-	cmd.AddCommand(newUpdateApplyCommand(&manifestURL))
+	cmd.PersistentFlags().StringVar(&channel, "channel", updater.ChannelAuto, "update channel: auto, stable, beta, or rc")
+	cmd.AddCommand(newUpdateCheckCommand(&manifestURL, &channel))
+	cmd.AddCommand(newUpdateApplyCommand(&manifestURL, &channel))
 	return cmd
 }
 
-func newUpdateCheckCommand(manifestURL *string) *cobra.Command {
+func newUpdateCheckCommand(manifestURL, channel *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Short: "Check whether a Cetus update is available",
@@ -189,13 +191,14 @@ func newUpdateCheckCommand(manifestURL *string) *cobra.Command {
 				return nil
 			}
 
-			result, err := updater.Check(cmd.Context(), version.Version, *manifestURL)
+			result, err := updater.Check(cmd.Context(), version.Version, *manifestURL, *channel)
 			if err != nil {
 				return err
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Current: %s\n", result.CurrentVersion)
 			fmt.Fprintf(cmd.OutOrStdout(), "Latest:  %s\n", result.LatestVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "Channel: %s\n", result.Channel)
 			fmt.Fprintf(cmd.OutOrStdout(), "Platform: %s\n", result.Platform)
 			if result.ReleaseNotesURL != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Release notes: %s\n", result.ReleaseNotesURL)
@@ -214,7 +217,7 @@ func newUpdateCheckCommand(manifestURL *string) *cobra.Command {
 	}
 }
 
-func newUpdateApplyCommand(manifestURL *string) *cobra.Command {
+func newUpdateApplyCommand(manifestURL, channel *string) *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
@@ -232,7 +235,7 @@ func newUpdateApplyCommand(manifestURL *string) *cobra.Command {
 				return nil
 			}
 
-			result, err := updater.Apply(cmd.Context(), version.Version, *manifestURL, force)
+			result, err := updater.Apply(cmd.Context(), version.Version, *manifestURL, *channel, force)
 			if err != nil {
 				return err
 			}
@@ -246,6 +249,7 @@ func newUpdateApplyCommand(manifestURL *string) *cobra.Command {
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated Cetus from %s to %s.\n", result.Check.CurrentVersion, result.Check.LatestVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "Channel: %s\n", result.Check.Channel)
 			fmt.Fprintf(cmd.OutOrStdout(), "Installed: %s\n", result.InstalledPath)
 			return nil
 		},
