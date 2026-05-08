@@ -30,32 +30,62 @@ jobs:
         run: |
           rm -rf dist
           mkdir -p dist
-          gh release download "${VERSION}" \
-            --repo "${{ github.repository }}" \
-            -D dist
+          gh release download "${VERSION}" --repo "${{ github.repository }}" -D dist
 
-      - name: Inspect downloaded release assets
+      - name: Recreate Goreleaser artifacts metadata
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          echo "=== dist files ==="
-          find dist -maxdepth 2 -type f | sort
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-      - name: Generate artifacts metadata if missing
-        run: |
-          if [ ! -f dist/artifacts.json ] && [ -f dist/metadata.json ]; then
-            cp dist/metadata.json dist/artifacts.json
-          fi
+          dist = Path("dist")
+          version = os.environ["VERSION"]
 
-          if [ ! -f dist/artifacts.json ]; then
-            echo "dist/artifacts.json is still missing"
-            echo "Downloaded files were:"
-            find dist -maxdepth 2 -type f | sort
-            exit 1
-          fi
+          items = []
 
-      - name: Debug artifacts
-        run: |
-          echo "=== Archive entries in artifacts.json ==="
-          jq '[.[] | select(.type == "Archive" or .type == "Zip") | {type, name, goos, goarch, binary: (.extra.Binary // .extra.Binaries[0])}]' dist/artifacts.json
+          for path in sorted(dist.iterdir()):
+              name = path.name
+
+              if name.endswith(".minisig") or name == "checksums.txt":
+                  continue
+
+              if name.endswith(".tar.gz"):
+                  kind = "Archive"
+                  base = name[:-7]
+              elif name.endswith(".zip"):
+                  kind = "Archive"
+                  base = name[:-4]
+              else:
+                  continue
+
+              parts = base.split("_")
+              goos = parts[-2]
+              goarch = parts[-1]
+
+              binary = "cetus.exe" if goos == "windows" else "cetus"
+
+              items.append({
+                  "type": kind,
+                  "name": name,
+                  "path": str(path),
+                  "goos": goos,
+                  "goarch": goarch,
+                  "goamd64": "v1" if goarch == "amd64" else "",
+                  "extra": {
+                      "Binary": binary,
+                      "Binaries": [binary],
+                  },
+              })
+
+          with open(dist / "artifacts.json", "w", encoding="utf-8") as f:
+              json.dump(items, f, indent=2)
+              f.write("\n")
+
+          print(json.dumps(items, indent=2))
+          PY
 
       - name: Select channel
         id: channel
