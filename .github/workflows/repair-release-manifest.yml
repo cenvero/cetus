@@ -34,6 +34,24 @@ jobs:
             --repo "${{ github.repository }}" \
             -D dist
 
+      - name: Inspect downloaded release assets
+        run: |
+          echo "=== dist files ==="
+          find dist -maxdepth 2 -type f | sort
+
+      - name: Generate artifacts metadata if missing
+        run: |
+          if [ ! -f dist/artifacts.json ] && [ -f dist/metadata.json ]; then
+            cp dist/metadata.json dist/artifacts.json
+          fi
+
+          if [ ! -f dist/artifacts.json ]; then
+            echo "dist/artifacts.json is still missing"
+            echo "Downloaded files were:"
+            find dist -maxdepth 2 -type f | sort
+            exit 1
+          fi
+
       - name: Debug artifacts
         run: |
           echo "=== Archive entries in artifacts.json ==="
@@ -73,7 +91,7 @@ jobs:
           FLEET_REPOSITORY: ${{ github.repository }}
         run: ./scripts/validate-release-manifest.sh
 
-      - name: Commit manifest
+      - name: Commit manifest and installers
         run: |
           git config user.name "cenvero-bot"
           git config user.email "276044322+cenvero-bot@users.noreply.github.com"
@@ -81,7 +99,7 @@ jobs:
           git add public/manifest.json public/signing.pub public/install.sh public/install.ps1 internal/update/signing.pub
 
           if git diff --cached --quiet; then
-            echo "No manifest changes"
+            echo "No manifest or installer changes"
             exit 0
           fi
 
