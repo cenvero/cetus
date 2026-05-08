@@ -41,7 +41,7 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 		}
 
 		t := float64(frame) / float64(composition.FPS)
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(t), nil, awaitPromise)); err != nil {
+		if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(frame, composition.FPS), nil, awaitPromise)); err != nil {
 			return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
 		}
 
@@ -111,6 +111,10 @@ func captureScreenshot(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 
+	if err := page.BringToFront().Do(targetCtx); err != nil {
+		return nil, fmt.Errorf("activate page before screenshot: %w", err)
+	}
+
 	png, err := page.CaptureScreenshot().
 		WithFormat(page.CaptureScreenshotFormatPng).
 		WithFromSurface(true).
@@ -132,16 +136,100 @@ func targetExecutorContext(ctx context.Context) (context.Context, error) {
 	return cdp.WithExecutor(ctx, c.Target), nil
 }
 
-func buildSeekScript(t float64) string {
+func buildSeekScript(frame, fps int) string {
+	t := float64(frame) / float64(fps)
 	timeLiteral := strconv.FormatFloat(t, 'f', -1, 64)
+	frameLiteral := strconv.Itoa(frame)
+	fpsLiteral := strconv.Itoa(fps)
 	return `(async function() {
   const cetusTime = ` + timeLiteral + `;
+  const cetusFrame = ` + frameLiteral + `;
+  const cetusFPS = ` + fpsLiteral + `;
   document.__cetusTime = cetusTime;
+  document.__cetusFrame = cetusFrame;
+  document.__cetusFPS = cetusFPS;
+  window.__cetusTime = cetusTime;
+  window.__cetusFrame = cetusFrame;
+  window.__cetusFPS = cetusFPS;
 
-  const timelines = Array.isArray(window.__timelines) ? window.__timelines : [];
-  for (const timeline of timelines) {
-    if (timeline && typeof timeline.seek === "function") {
-      timeline.seek(cetusTime, false);
+  const frameDetail = Object.freeze({
+    time: cetusTime,
+    frame: cetusFrame,
+    fps: cetusFPS
+  });
+
+  function delay(ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      Promise.resolve(promise).catch(function() {}),
+      delay(ms)
+    ]);
+  }
+
+  async function runFrameHooks() {
+    const hooks = [];
+    if (typeof window.__cetusSeek === "function") {
+      hooks.push(window.__cetusSeek(cetusTime, frameDetail));
+    }
+    if (typeof window.__cetusRenderFrame === "function") {
+      hooks.push(window.__cetusRenderFrame(cetusTime, frameDetail));
+    }
+    if (Array.isArray(window.__cetusFrameCallbacks)) {
+      for (const hook of window.__cetusFrameCallbacks) {
+        if (typeof hook === "function") {
+          hooks.push(hook(cetusTime, frameDetail));
+        }
+      }
+    }
+    if (hooks.length > 0) {
+      await Promise.all(hooks.map(function(hookResult) {
+        return withTimeout(hookResult, 5000);
+      }));
+    }
+    document.dispatchEvent(new CustomEvent("cetus:seek", { detail: frameDetail }));
+  }
+
+  function clipTimingFor(target) {
+    const clip = target && typeof target.closest === "function" ? target.closest(".clip") : null;
+    if (!clip) {
+      return { active: true, localTime: cetusTime };
+    }
+    const start = Number(clip.dataset.start) || 0;
+    return {
+      localTime: Math.max(0, cetusTime - start)
+    };
+  }
+
+  function seekWebAnimations() {
+    if (typeof document.getAnimations !== "function") {
+      return;
+    }
+    for (const animation of document.getAnimations({ subtree: true })) {
+      try {
+        if (!animation || !animation.effect) {
+          continue;
+        }
+        const target = animation.effect.target;
+        const timing = clipTimingFor(target);
+        const targetTime = Math.max(0, timing.localTime * 1000);
+        animation.pause();
+        animation.currentTime = targetTime;
+      } catch (_) {
+      }
+    }
+  }
+
+  function seekTimelines() {
+    const timelines = Array.isArray(window.__timelines) ? window.__timelines : [];
+    for (const timeline of timelines) {
+      if (timeline && typeof timeline.seek === "function") {
+        timeline.seek(cetusTime, false);
+      }
     }
   }
 
@@ -152,34 +240,116 @@ func buildSeekScript(t float64) string {
       cetusTime >= start && cetusTime < start + duration;
   }
 
-  function waitForSeek(media, targetTime) {
+  function waitForEvent(target, eventNames, timeoutMS) {
     return new Promise(function(resolve) {
-      if (!Number.isFinite(targetTime) || targetTime < 0) {
-        resolve();
-        return;
-      }
-
       const done = function() {
         clearTimeout(timer);
-        media.removeEventListener("seeked", done);
-        media.removeEventListener("error", done);
+        for (const eventName of eventNames) {
+          target.removeEventListener(eventName, done);
+        }
         resolve();
       };
-      const timer = setTimeout(done, 2000);
-      media.addEventListener("seeked", done, { once: true });
-      media.addEventListener("error", done, { once: true });
-
-      try {
-        if (Math.abs(media.currentTime - targetTime) < 0.001) {
-          done();
-          return;
-        }
-        media.currentTime = targetTime;
-      } catch (_) {
-        done();
+      const timer = setTimeout(done, timeoutMS);
+      for (const eventName of eventNames) {
+        target.addEventListener(eventName, done, { once: true });
       }
     });
   }
+
+  async function waitForMediaMetadata(media) {
+    if (media.readyState >= 1) {
+      return;
+    }
+    try {
+      media.load();
+    } catch (_) {
+    }
+    await waitForEvent(media, ["loadedmetadata", "error"], 2000);
+  }
+
+  async function waitForVideoFrame(video) {
+    if (typeof video.requestVideoFrameCallback !== "function") {
+      await waitForPaint();
+      return;
+    }
+    await new Promise(function(resolve) {
+      const timer = setTimeout(resolve, 500);
+      try {
+        video.requestVideoFrameCallback(function() {
+          clearTimeout(timer);
+          resolve();
+        });
+      } catch (_) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  }
+
+  async function waitForSeek(media, targetTime) {
+    if (!Number.isFinite(targetTime) || targetTime < 0) {
+      return;
+    }
+
+    await waitForMediaMetadata(media);
+
+    try {
+      if (typeof media.pause === "function") {
+        media.pause();
+      }
+      if (Math.abs(media.currentTime - targetTime) >= 0.001) {
+        const seek = waitForEvent(media, ["seeked", "error"], 2000);
+        if (typeof media.fastSeek === "function") {
+          media.fastSeek(targetTime);
+        } else {
+          media.currentTime = targetTime;
+        }
+        await seek;
+      }
+    } catch (_) {
+    }
+
+    if (media.tagName.toLowerCase() === "video") {
+      await waitForVideoFrame(media);
+    }
+  }
+
+  async function waitForImage(img) {
+    if (!(img instanceof HTMLImageElement)) {
+      return;
+    }
+    if (!img.complete) {
+      await waitForEvent(img, ["load", "error"], 2000);
+    }
+    if (img.complete && img.naturalWidth !== 0 && typeof img.decode === "function") {
+      await withTimeout(img.decode(), 2000);
+    }
+  }
+
+  function waitForPaint() {
+    return new Promise(function(resolve) {
+      let finished = false;
+      const finish = function() {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+      const timer = setTimeout(finish, 32);
+      try {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(finish);
+        });
+      } catch (_) {
+        finish();
+      }
+    });
+  }
+
+  seekTimelines();
+  await runFrameHooks();
+  seekTimelines();
 
   const waits = [];
   for (const el of document.querySelectorAll(".clip")) {
@@ -202,11 +372,19 @@ func buildSeekScript(t float64) string {
       if (isActive) {
         waits.push(waitForSeek(el, localTime));
       }
+    } else if (tagName === "img" && isActive) {
+      waits.push(waitForImage(el));
     }
   }
 
+  seekWebAnimations();
+  if (document.fonts && document.fonts.ready) {
+    waits.push(withTimeout(document.fonts.ready, 2000));
+  }
   await Promise.all(waits);
+  seekWebAnimations();
   document.body.getBoundingClientRect();
+  await waitForPaint();
   return true;
 })()`
 }

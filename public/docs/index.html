@@ -200,18 +200,25 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
 
         <section id="animation">
           <h2>Animation</h2>
-          <p>CSS animations, WebGL, Three.js, GSAP, video, audio, and normal browser APIs can run inside a composition. GSAP timelines should be paused and registered on <code>window.__timelines</code>.</p>
+          <p>CSS animations, Web Animations, GSAP, video, audio, WebGL, Three.js, and normal browser APIs can run inside a composition. Cetus seeks CSS and Web Animations automatically. GSAP timelines should be paused and registered on <code>window.__timelines</code>.</p>
           <pre><code>&lt;script&gt;
   window.__timelines = window.__timelines || [];
   const tl = gsap.timeline({ paused: true });
   tl.from("#title", { opacity: 0, y: 40, duration: 0.8 });
   window.__timelines.push(tl);
 &lt;/script&gt;</code></pre>
+          <p>For canvas, WebGL, Three.js, particles, or custom JavaScript animation, draw from Cetus time instead of wall-clock time.</p>
+          <pre><code>&lt;script&gt;
+  window.__cetusRenderFrame = async function(time, detail) {
+    // detail.frame and detail.fps are also available.
+    drawSceneAt(time);
+  };
+&lt;/script&gt;</code></pre>
         </section>
 
         <section id="rendering">
           <h2>Rendering Model</h2>
-          <p>For each frame, Cetus calculates <code>time = frame / fps</code>, writes that time to <code>document.__cetusTime</code>, seeks timelines, seeks media elements, updates clip visibility, then captures one deterministic browser frame through Chrome DevTools.</p>
+          <p>For each frame, Cetus calculates <code>time = frame / fps</code>, writes that time to <code>document.__cetusTime</code> and <code>window.__cetusTime</code>, seeks CSS/Web Animations, timelines, custom frame hooks, and media elements, waits for active images, fonts, video frames, and paint, then captures one deterministic browser frame through Chrome DevTools.</p>
           <pre><code>cetus.html
   -> parse data attributes
   -> launch embedded headless browser

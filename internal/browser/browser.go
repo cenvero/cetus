@@ -45,9 +45,12 @@ func New(ctx context.Context, htmlPath string, composition *compose.Composition,
 		chromedp.Flag("hide-scrollbars", true),
 		chromedp.Flag("mute-audio", true),
 		chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("disable-background-timer-throttling", true),
 		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("disable-renderer-backgrounding", true),
 		chromedp.Flag("disable-translate", true),
 		chromedp.Flag("disable-sync", true),
+		chromedp.Flag("run-all-compositor-stages-before-draw", true),
 		chromedp.WindowSize(composition.Width, composition.Height),
 	}
 	if opts.NoGPU {

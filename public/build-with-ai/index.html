@@ -731,8 +731,19 @@ Cetus composition rules:
 - data-start and data-duration are in seconds.
 - Higher data-track-index means the element appears above lower tracks.
 - If media elements are used, include data-volume when relevant.
-- Use CSS for layout and animation when possible.
-- If GSAP is used, create paused timelines and push them into window.__timelines.
+- Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
+- If GSAP is useful, you may use it, but every GSAP timeline must be paused and registered on window.__timelines so Cetus can seek it.
+- GSAP pattern to follow when GSAP is loaded:
+  <script>
+    window.__timelines = window.__timelines || [];
+    const tl = gsap.timeline({ paused: true });
+    tl.from("#title", { opacity: 0, duration: 0.6 });
+    window.__timelines.push(tl);
+  <\/script>
+- Do not drive visual timing from Date.now(), performance.now(), setInterval(), autoplay, or unbounded requestAnimationFrame loops.
+- For canvas, WebGL, Three.js, particle systems, or custom JavaScript animation, render from Cetus time by defining window.__cetusRenderFrame = async function(time, detail) { ... } or by adding callbacks to window.__cetusFrameCallbacks. The detail object contains frame and fps.
+- Custom render hooks must draw the full visual state for the supplied time. Do not depend on elapsed wall-clock time between frames.
+- Avoid external dependencies unless they are necessary and explicitly loaded in the HTML. Prefer self-contained CSS/Web Animations for robust renders.
 - Do not require Node.js, npm, React, Vite, or a build step.
 - Prefer local asset paths for files I provide.
 - Make the composition readable and polished at the requested output size.

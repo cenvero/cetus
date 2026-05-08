@@ -85,7 +85,8 @@ Timed elements use `class="clip"` plus:
 - `data-track-index`
 - optional `data-volume`
 
-GSAP timelines should be paused and registered on `window.__timelines`.
+CSS and Web Animations are seeked automatically for each captured frame. GSAP
+timelines should be paused and registered on `window.__timelines`.
 
 ```html
 <script>
@@ -93,6 +94,17 @@ GSAP timelines should be paused and registered on `window.__timelines`.
   const tl = gsap.timeline({ paused: true });
   tl.from("#title", { opacity: 0, duration: 0.6 });
   window.__timelines.push(tl);
+</script>
+```
+
+Canvas, WebGL, Three.js, particle systems, and custom JavaScript animation
+should draw from Cetus time instead of wall-clock time:
+
+```html
+<script>
+  window.__cetusRenderFrame = async function(time, detail) {
+    drawSceneAt(time); // detail.frame and detail.fps are also available.
+  };
 </script>
 ```
 
