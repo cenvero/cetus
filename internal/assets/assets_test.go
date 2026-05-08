@@ -93,6 +93,33 @@ func TestAssetCacheDirRejectsUnsafeVersion(t *testing.T) {
 	}
 }
 
+func TestHeaderModeUsesTarPermissions(t *testing.T) {
+	got := headerMode(&tar.Header{Mode: 0o100755}, 0o600)
+	if got != 0o755 {
+		t.Fatalf("headerMode() = %v, want 0755", got)
+	}
+}
+
+func TestHeaderModeFallsBackForEmptyOrInvalidMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode int64
+	}{
+		{name: "empty", mode: 0},
+		{name: "negative", mode: -1},
+		{name: "overflow", mode: 1 << 32},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := headerMode(&tar.Header{Mode: tt.mode}, 0o600)
+			if got != 0o600 {
+				t.Fatalf("headerMode() = %v, want fallback 0600", got)
+			}
+		})
+	}
+}
+
 type tarEntry struct {
 	name string
 	mode int64

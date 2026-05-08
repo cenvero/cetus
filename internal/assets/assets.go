@@ -226,6 +226,9 @@ func safeExtractPath(destDir, name string) (string, error) {
 }
 
 func headerMode(header *tar.Header, fallback fs.FileMode) fs.FileMode {
+	if header.Mode < 0 || header.Mode > 1<<32-1 {
+		return fallback
+	}
 	mode := fs.FileMode(header.Mode).Perm()
 	if mode == 0 {
 		return fallback
