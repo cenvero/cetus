@@ -143,7 +143,7 @@ func Apply(ctx context.Context, currentVersion, manifestURL string, force bool) 
 	if err := extractBinary(archivePath, newBinary); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(newBinary, 0o755); err != nil {
+	if err := os.Chmod(newBinary, 0o700); err != nil { // #nosec G302 -- downloaded update binary must be executable before replacement.
 		return nil, fmt.Errorf("mark downloaded binary executable: %w", err)
 	}
 
@@ -225,7 +225,7 @@ func download(ctx context.Context, url, destPath string) error {
 		return fmt.Errorf("download release archive: unexpected status %s", resp.Status)
 	}
 
-	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- destPath is created inside a private updater temp directory.
 	if err != nil {
 		return fmt.Errorf("create archive file: %w", err)
 	}
@@ -242,7 +242,7 @@ func verifySHA256(path, expected string) error {
 		return fmt.Errorf("manifest binary is missing sha256")
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is the downloaded archive path inside the updater temp directory.
 	if err != nil {
 		return fmt.Errorf("open archive for checksum: %w", err)
 	}
@@ -271,7 +271,7 @@ func extractBinary(archivePath, destPath string) error {
 }
 
 func extractTarGzBinary(archivePath, destPath string) error {
-	file, err := os.Open(archivePath)
+	file, err := os.Open(archivePath) // #nosec G304 -- archivePath is the downloaded archive path inside the updater temp directory.
 	if err != nil {
 		return fmt.Errorf("open tar archive: %w", err)
 	}
@@ -331,7 +331,7 @@ func extractZipBinary(archivePath, destPath string) error {
 }
 
 func writeExtractedFile(reader io.Reader, destPath string) error {
-	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- destPath is the extracted binary path inside the updater temp directory.
 	if err != nil {
 		return fmt.Errorf("create extracted binary: %w", err)
 	}

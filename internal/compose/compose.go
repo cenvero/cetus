@@ -30,7 +30,7 @@ type Clip struct {
 }
 
 func Parse(path string) (*Composition, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- parsing a user-selected composition file is the purpose of this API.
 	if err != nil {
 		return nil, fmt.Errorf("open composition HTML: %w", err)
 	}

@@ -34,7 +34,7 @@ func New(ffmpegPath, output string, fps int, format string) (*Encoder, error) {
 
 	enc := &Encoder{done: make(chan error, 1)}
 	args := buildFFmpegArgs(output, fps, resolvedFormat)
-	enc.cmd = exec.Command(ffmpegPath, args...)
+	enc.cmd = exec.Command(ffmpegPath, args...) // #nosec G204 -- ffmpegPath is the configured renderer executable; args are not shell-expanded.
 	enc.cmd.Stderr = &enc.stderr
 
 	stdin, err := enc.cmd.StdinPipe()

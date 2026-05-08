@@ -29,7 +29,7 @@ func EnsureAssets(version string) (chromePath, ffmpegPath string, err error) {
 	}
 
 	cacheDir := filepath.Join(cacheRoot, "cetus", version)
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", "", fmt.Errorf("create asset cache directory: %w", err)
 	}
 
@@ -46,10 +46,10 @@ func EnsureAssets(version string) (chromePath, ffmpegPath string, err error) {
 	if err := decompressAsset(ffmpegData, ffmpegPath); err != nil {
 		return "", "", fmt.Errorf("extract ffmpeg: %w", err)
 	}
-	if err := os.Chmod(chromePath, 0o755); err != nil {
+	if err := os.Chmod(chromePath, 0o700); err != nil { // #nosec G302 -- cached browser binary must be executable by the current user.
 		return "", "", fmt.Errorf("mark chrome executable: %w", err)
 	}
-	if err := os.Chmod(ffmpegPath, 0o755); err != nil {
+	if err := os.Chmod(ffmpegPath, 0o700); err != nil { // #nosec G302 -- cached ffmpeg binary must be executable by the current user.
 		return "", "", fmt.Errorf("mark ffmpeg executable: %w", err)
 	}
 
@@ -84,11 +84,11 @@ func decompressAsset(data []byte, destPath string) error {
 	}
 
 	tmpPath := destPath + ".tmp"
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o700); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- destPath is built from the user cache directory and fixed asset names.
 	if err != nil {
 		return fmt.Errorf("create temporary asset file: %w", err)
 	}

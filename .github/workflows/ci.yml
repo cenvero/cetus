@@ -72,9 +72,8 @@ jobs:
       - run: ./scripts/ensure-asset-stubs.sh
       - run: GOTOOLCHAIN=local go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
       - run: GOTOOLCHAIN=local govulncheck ./...
-      - uses: securego/gosec@master
-        with:
-          args: ./...
+      - run: GOTOOLCHAIN=local go install github.com/securego/gosec/v2/cmd/gosec@v2.26.1
+      - run: GOTOOLCHAIN=local "$(go env GOPATH)/bin/gosec" ./...
 
   manifest-validate:
     runs-on: ubuntu-latest

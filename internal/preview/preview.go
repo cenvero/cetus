@@ -49,7 +49,8 @@ func ServeContext(ctx context.Context, htmlPath string, port int, noOpen bool) e
 	actualPort := listener.Addr().(*net.TCPAddr).Port
 	hub := newHub()
 	server := &http.Server{
-		Handler: previewHandler(absHTML, actualPort, hub),
+		Handler:           previewHandler(absHTML, actualPort, hub),
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	serverErr := make(chan error, 1)
@@ -173,7 +174,7 @@ func previewHandler(htmlPath string, port int, hub *hub) http.Handler {
 }
 
 func serveInjectedHTML(w http.ResponseWriter, htmlPath string, port int) {
-	data, err := os.ReadFile(htmlPath)
+	data, err := os.ReadFile(htmlPath) // #nosec G304 -- htmlPath is resolved and stat-checked before starting the preview server.
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -263,7 +264,7 @@ func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, error) {
 
 func referencedAssetDirs(htmlPath string) map[string]struct{} {
 	dirs := make(map[string]struct{})
-	data, err := os.ReadFile(htmlPath)
+	data, err := os.ReadFile(htmlPath) // #nosec G304 -- htmlPath is resolved and stat-checked before watcher setup.
 	if err != nil {
 		return dirs
 	}
@@ -318,11 +319,11 @@ func openBrowser(target string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", target)
+		cmd = exec.Command("open", target) // #nosec G204 -- command is fixed and target is the generated localhost preview URL.
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target) // #nosec G204 -- command is fixed and target is the generated localhost preview URL.
 	default:
-		cmd = exec.Command("xdg-open", target)
+		cmd = exec.Command("xdg-open", target) // #nosec G204 -- command is fixed and target is the generated localhost preview URL.
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("launch browser: %w", err)
