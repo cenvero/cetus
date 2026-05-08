@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Go 1.24 or newer
+- Go 1.26.3 or newer
 - `brotli`, `curl`, and `unzip` when preparing embedded assets
 - `ffmpeg` and Chrome assets are bundled through `scripts/prep-assets.sh`
 
@@ -26,4 +26,3 @@ go test ./...
 
 The placeholder files under `internal/assets/*` are not usable runtime assets.
 Before release builds, run `scripts/prep-assets.sh` for every target platform.
-
