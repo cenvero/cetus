@@ -3,258 +3,760 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cetus</title>
-  <meta name="description" content="Cetus renders HTML compositions into MP4 and WebM video files with a bundled browser and ffmpeg.">
+  <title>Cenvero Cetus - HTML to video renderer</title>
+  <meta name="description" content="Cenvero Cetus renders HTML compositions into MP4 and WebM with deterministic browser capture, bundled Chrome, and bundled ffmpeg.">
+  <link rel="icon" href="https://cdn.cenvero.com/favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
       --bg: #030508;
-      --panel: #0d1418;
-      --panel-2: #111b20;
-      --text: #edf7f5;
-      --muted: #99aaa6;
-      --line: #213139;
+      --bg2: #080b11;
+      --card: rgba(10, 14, 22, 0.6);
+      --card-hover: rgba(15, 20, 30, 0.82);
+      --text: #f0f4f8;
+      --muted: #94a3b8;
+      --subtle: #475569;
       --accent: #00ebb8;
-      --accent-soft: rgba(0, 235, 184, 0.14);
+      --accent-hover: #00ffd0;
+      --accent-soft: rgba(0, 235, 184, 0.1);
+      --accent-border: rgba(0, 235, 184, 0.25);
+      --border: rgba(255, 255, 255, 0.08);
       --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --radius: 12px;
+      --nav-h: 64px;
     }
-    * { box-sizing: border-box; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      background: var(--bg);
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(0, 235, 184, 0.035), rgba(3, 5, 8, 0) 32rem),
+        var(--bg);
       color: var(--text);
       font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.6;
       letter-spacing: 0;
+      overflow-x: hidden;
     }
-    a { color: inherit; }
-    .wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
-    header {
-      border-bottom: 1px solid var(--line);
-      background: rgba(3, 5, 8, 0.9);
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre { font-family: var(--mono); }
+
+    .nav {
       position: sticky;
       top: 0;
-      backdrop-filter: blur(12px);
-      z-index: 5;
-    }
-    nav {
+      z-index: 200;
+      height: var(--nav-h);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      min-height: 64px;
-      gap: 24px;
+      padding: 0 clamp(20px, 5vw, 60px);
+      background: rgba(3, 5, 8, 0.72);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-links a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+    .nav-links a:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+      text-decoration: none;
+    }
+    .nav-links .nav-cta {
+      color: var(--bg);
+      background: var(--accent);
       font-weight: 700;
-      font-size: 17px;
     }
-    .mark {
-      width: 28px;
-      height: 28px;
-      border: 1px solid var(--accent);
-      background: var(--accent-soft);
+    .nav-links .nav-cta:hover {
+      color: var(--bg);
+      background: var(--accent-hover);
+      box-shadow: 0 0 20px rgba(0, 235, 184, 0.25);
+    }
+    .nav-burger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      padding: 4px;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    .nav-burger span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text);
+      border-radius: 2px;
+    }
+    .nav-mobile {
+      display: none;
+      position: fixed;
+      top: var(--nav-h);
+      left: 0;
+      right: 0;
+      z-index: 199;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+      background: rgba(3, 5, 8, 0.96);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-mobile.open { display: flex; }
+    .nav-mobile a {
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 500;
+    }
+    .nav-mobile a:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+      text-decoration: none;
+    }
+
+    .hero {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: clamp(60px, 12vh, 140px) clamp(20px, 5vw, 60px) clamp(40px, 8vh, 80px);
       display: grid;
-      place-items: center;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+    .hero-content { max-width: 620px; }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      padding: 6px 16px;
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      background: var(--accent-soft);
       color: var(--accent);
       font-family: var(--mono);
-      font-size: 13px;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      box-shadow: 0 0 20px rgba(0, 235, 184, 0.1);
     }
-    .links { display: flex; gap: 18px; color: var(--muted); font-size: 14px; }
-    .hero {
-      min-height: calc(100vh - 64px);
-      display: grid;
-      align-items: center;
-      padding: 72px 0 48px;
+    .hero-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
     }
-    .hero-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
-      gap: 48px;
-      align-items: center;
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
     }
-    h1 {
-      margin: 0;
-      font-size: clamp(48px, 7vw, 92px);
-      line-height: 0.95;
+    .hero h1 {
+      margin: 0 0 24px;
+      font-size: clamp(2.5rem, 5vw, 4.2rem);
+      font-weight: 700;
+      line-height: 1.05;
       letter-spacing: 0;
+      color: var(--text);
     }
-    .lead {
+    .hero h1 span {
       color: var(--muted);
-      font-size: 20px;
-      line-height: 1.55;
-      margin: 24px 0 32px;
-      max-width: 650px;
     }
-    .command {
+    .hero p {
+      margin: 0 0 40px;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      line-height: 1.7;
+    }
+    .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+    .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn-primary {
+      background: var(--accent);
+      color: #020806;
+      box-shadow: 0 8px 24px rgba(0, 235, 184, 0.2);
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 12px 32px rgba(0, 235, 184, 0.32);
+      color: #020806;
+    }
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      border-color: var(--border);
+      backdrop-filter: blur(10px);
+    }
+    .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .hero-terminal {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #06090e;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    }
+    .hero-terminal::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
+    }
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border);
+    }
+    .os-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .os-tab {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      padding: 14px 16px;
-      max-width: 560px;
-      font-family: var(--mono);
-      font-size: 14px;
-      overflow-x: auto;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: none;
+      color: var(--subtle);
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
     }
-    .command span { color: var(--accent); white-space: nowrap; }
-    .terminal {
-      border: 1px solid var(--line);
-      background: #05090c;
-      overflow: hidden;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+    .os-tab:hover { color: var(--muted); background: rgba(255, 255, 255, 0.03); }
+    .os-tab.active {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border-color: var(--border);
     }
-    .terminal-head {
-      height: 42px;
-      border-bottom: 1px solid var(--line);
+    .os-tab svg { width: 14px; height: 14px; }
+    .os-panel { display: none; padding: 24px; }
+    .os-panel.active { display: block; animation: fadeIn 220ms ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .install-box-label {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 0 14px;
-      color: var(--muted);
+      margin-bottom: 16px;
+      color: var(--accent);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); opacity: 0.8; }
+    .rec-pill {
+      padding: 2px 8px;
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.65rem;
+      letter-spacing: 0.05em;
+    }
+    .install-cmd-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .install-cmd-row code {
+      flex: 1;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .install-cmd-row button,
+    .install-box-alt button,
+    .copy-btn {
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+    .install-cmd-row button { padding: 6px 14px; }
+    .install-cmd-row button:hover,
+    .copy-btn:hover {
+      background: var(--text);
+      color: var(--bg);
+    }
+    .install-box-alt {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .install-box-alt span { color: var(--muted); font-size: 0.85rem; }
+    .install-box-alt code { color: #a5b4fc; font-size: 0.85rem; }
+    .install-box-alt button { padding: 4px 10px; color: var(--muted); background: none; }
+    .install-box-alt button:hover { color: var(--accent); border-color: var(--accent); }
+    .install-note {
+      margin: 16px 0 0;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+
+    .divider { margin: 0; border: 0; border-top: 1px solid var(--border); }
+    .section {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: clamp(60px, 10vw, 120px) clamp(20px, 5vw, 60px);
+    }
+    .section-label {
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .section-title {
+      margin: 0 0 16px;
+      color: var(--text);
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .section-sub {
+      max-width: 640px;
+      margin: 0 0 60px;
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1.6;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      min-height: 210px;
+      padding: 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      transition: transform 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+    }
+    .feature-card:hover {
+      border-color: var(--accent-border);
+      background: var(--card-hover);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.38);
+    }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      border: 1px solid var(--accent-border);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(0, 235, 184, 0.1), rgba(0, 235, 184, 0.02));
+    }
+    .feature-icon svg { width: 22px; height: 22px; stroke: var(--accent); stroke-width: 1.8; }
+    .feature-card h3 {
+      margin: 0 0 10px;
+      color: var(--text);
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    .feature-card p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .feature-card code { color: #cbd5e1; font-size: 0.88em; }
+
+    .qs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+    .code-wrap {
+      position: relative;
+      margin: 0 0 24px;
+    }
     pre {
       margin: 0;
-      padding: 20px;
-      overflow: auto;
-      color: #d6e9e5;
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-    .band { border-top: 1px solid var(--line); padding: 56px 0; }
-    .features {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
-    .feature {
-      border: 1px solid var(--line);
-      background: var(--panel);
-      padding: 20px;
+      min-height: 168px;
+      padding: 24px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
       border-radius: 8px;
-      min-height: 140px;
+      background: #06090e;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
     }
-    .feature h2 { margin: 0 0 12px; font-size: 18px; }
-    .feature p { margin: 0; color: var(--muted); line-height: 1.5; }
+    pre .c { color: #64748b; }
+    pre .kw { color: var(--accent); }
+    pre .flag { color: #a5b4fc; }
+    .copy-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 6px 12px;
+    }
+
     footer {
-      color: var(--muted);
-      border-top: 1px solid var(--line);
-      padding: 28px 0;
-      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: clamp(30px, 4vw, 40px) clamp(20px, 5vw, 60px);
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+      color: var(--subtle);
+      font-size: 0.9rem;
     }
-    @media (max-width: 860px) {
-      .hero { padding-top: 48px; }
-      .hero-grid, .features { grid-template-columns: 1fr; }
-      .links { display: none; }
+    footer a { color: var(--muted); transition: color 180ms ease; }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+
+    @media (max-width: 1024px) {
+      .hero { grid-template-columns: 1fr; text-align: center; gap: 40px; }
+      .hero-content { max-width: 100%; margin: 0 auto; }
+      .hero-actions { justify-content: center; }
+      .hero-terminal { text-align: left; }
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-burger { display: flex; }
+      .qs-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 2.5rem; }
+    }
+    @media (max-width: 560px) {
+      .os-tabs { width: 100%; }
+      .os-tab { flex: 1; justify-content: center; padding-inline: 8px; }
+      .install-cmd-row { flex-direction: column; align-items: stretch; }
+      .install-cmd-row button { align-self: stretch; }
+      pre { font-size: 0.82rem; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <nav class="wrap">
-      <div class="brand"><span class="mark">C</span> Cetus</div>
-      <div class="links">
-        <a href="/docs/">Docs</a>
-        <a href="/build-with-ai/">Build with AI</a>
-        <a href="https://github.com/cenvero/cetus">GitHub</a>
-        <a href="manifest.json">Manifest</a>
+
+<nav class="nav">
+  <a class="nav-brand" href="/">cenvero / <span>cetus</span></a>
+  <div class="nav-links">
+    <a href="/docs/">Docs</a>
+    <a href="/build-with-ai/">Build with AI</a>
+    <a href="https://github.com/cenvero/cetus">GitHub</a>
+    <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+    <a href="#install" class="nav-cta">Get Started</a>
+  </div>
+  <button class="nav-burger" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+<div class="nav-mobile" id="nav-mobile">
+  <a href="/docs/">Docs</a>
+  <a href="/build-with-ai/">Build with AI</a>
+  <a href="https://github.com/cenvero/cetus">GitHub</a>
+  <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+  <a href="#install">Get Started</a>
+</div>
+
+<section class="hero" id="install">
+  <div class="hero-content">
+    <div class="hero-badge">Deterministic HTML to video</div>
+    <h1>Render browser-native video.<br><span>No build step required.</span></h1>
+    <p>Cenvero Cetus turns plain HTML compositions into MP4 and WebM. It bundles Chrome headless shell and ffmpeg, seeks every frame deterministically, and works with CSS, GSAP, video, WebGL, Three.js, and AI-generated scenes.</p>
+    <div class="hero-actions">
+      <a href="/docs/" class="btn btn-primary"><i data-lucide="book-open"></i>Read the docs</a>
+      <a href="/build-with-ai/" class="btn btn-ghost"><i data-lucide="sparkles"></i>Build with AI</a>
+    </div>
+  </div>
+
+  <div class="hero-terminal">
+    <div class="terminal-header">
+      <div class="os-tabs" id="osTabs">
+        <button class="os-tab" data-os="mac" onclick="switchOS('mac')">
+          <span class="tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg></span>
+          macOS
+        </button>
+        <button class="os-tab" data-os="linux" onclick="switchOS('linux')">
+          <span class="tab-icon"><i data-lucide="terminal"></i></span>
+          Linux
+        </button>
+        <button class="os-tab" data-os="windows" onclick="switchOS('windows')">
+          <span class="tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5l-9 1.26V12h9zM3 13h6v6.08l-6-1.29V13zm17 0h-9v6.74L20 18.5V13z"/></svg></span>
+          Windows
+        </button>
       </div>
-    </nav>
-  </header>
+    </div>
 
-  <main>
-    <section class="hero">
-      <div class="wrap hero-grid">
-        <div>
-          <h1>Cetus</h1>
-          <p class="lead">A self-contained CLI that renders HTML compositions into MP4 and WebM video files with deterministic browser frame capture and bundled ffmpeg encoding.</p>
-          <div class="command"><span>curl -fsSL https://cetus.cenvero.org/install | sh</span></div>
-          <div class="command"><span>curl -fsSL https://cetus.cenvero.org/install-beta | sh</span></div>
-        </div>
-        <div class="terminal" aria-label="Cetus usage example">
-          <div class="terminal-head"><span class="dot"></span> cetus.html</div>
-          <pre><code>&lt;div id="root"
-  data-composition-id="intro"
-  data-width="1920"
-  data-height="1080"
-  data-duration="5"
-  data-fps="30"&gt;
-
-  &lt;h1 class="clip"
-    data-start="0.5"
-    data-duration="4"
-    data-track-index="0"&gt;
-    Hello World
-  &lt;/h1&gt;
-&lt;/div&gt;
-
-cetus render cetus.html -o out.mp4</code></pre>
-        </div>
+    <div class="os-panel" data-os="mac">
+      <div class="install-box-label">Homebrew <span class="rec-pill">recommended</span></div>
+      <div class="install-cmd-row">
+        <code>brew tap cenvero/cetus && brew install cenvero-cetus</code>
+        <button onclick="copyCmd(this,'brew tap cenvero/cetus\nbrew install cenvero-cetus')">copy</button>
       </div>
-    </section>
-
-    <section class="band">
-      <div class="wrap features">
-        <article class="feature">
-          <h2>Single Binary</h2>
-          <p>Chrome headless shell and ffmpeg are embedded per platform and extracted once into the user cache.</p>
-        </article>
-        <article class="feature">
-          <h2>Browser Native</h2>
-          <p>Use CSS, GSAP, video, WebGL, Three.js, and normal HTML assets without Node.js or npm.</p>
-        </article>
-        <article class="feature">
-          <h2>Exact Frames</h2>
-          <p>Cetus seeks clips, CSS/Web Animations, timelines, media, and custom frame hooks before each Chrome DevTools capture.</p>
-        </article>
+      <div class="install-box-alt">
+        <span>or one-liner:</span>
+        <code>curl -fsSL https://cetus.cenvero.org/install | sh</code>
+        <button onclick="copyCmd(this,'curl -fsSL https://cetus.cenvero.org/install | sh')">copy</button>
       </div>
-    </section>
+      <p class="install-note"># Homebrew installs update with: brew update && brew upgrade cenvero-cetus</p>
+    </div>
 
-    <section class="band">
-      <div class="wrap features">
-        <article class="feature">
-          <h2>Read the Docs</h2>
-          <p>Learn the composition attributes, render flags, preview workflow, and how Cetus turns HTML into video.</p>
-        </article>
-        <article class="feature">
-          <h2>Build with AI</h2>
-          <p>Generate prompts for ChatGPT, Codex, Claude Code, or terminal agents that create Cetus HTML and render commands.</p>
-        </article>
-        <article class="feature">
-          <h2>Video Templates</h2>
-          <p>Start from intro videos, website-to-video clips, launch teasers, explainers, social posts, and product demos.</p>
-        </article>
+    <div class="os-panel" data-os="linux">
+      <div class="install-box-label">One-liner</div>
+      <div class="install-cmd-row">
+        <code>curl -fsSL https://cetus.cenvero.org/install | sh</code>
+        <button onclick="copyCmd(this,'curl -fsSL https://cetus.cenvero.org/install | sh')">copy</button>
       </div>
-    </section>
-
-    <section class="band">
-      <div class="wrap features">
-        <article class="feature">
-          <h2>Self Update</h2>
-          <p>Direct binary installs can run <code>cetus update check</code> and <code>cetus update apply</code>. Self-updates stay on stable, beta, or rc by default.</p>
-        </article>
-        <article class="feature">
-          <h2>Homebrew</h2>
-          <p>Homebrew installs are updated through <code>brew update && brew upgrade cenvero-cetus</code>.</p>
-        </article>
-        <article class="feature">
-          <h2>Manifest Verified</h2>
-          <p>Update downloads are matched to the platform release manifest and checked with SHA-256.</p>
-        </article>
+      <div class="install-box-alt">
+        <span>beta channel:</span>
+        <code>curl -fsSL https://cetus.cenvero.org/install-beta | sh</code>
+        <button onclick="copyCmd(this,'curl -fsSL https://cetus.cenvero.org/install-beta | sh')">copy</button>
       </div>
-    </section>
-  </main>
+      <p class="install-note"># No system Chrome, Node.js, npm, or ffmpeg required.</p>
+    </div>
 
-  <footer>
-    <div class="wrap">AGPL-3.0-or-later. Built by Cenvero.</div>
-  </footer>
+    <div class="os-panel" data-os="windows">
+      <div class="install-box-label">PowerShell</div>
+      <div class="install-cmd-row">
+        <code>irm https://cetus.cenvero.org/install.ps1 | iex</code>
+        <button onclick="copyCmd(this,'irm https://cetus.cenvero.org/install.ps1 | iex')">copy</button>
+      </div>
+      <div class="install-box-alt">
+        <span>beta channel:</span>
+        <code>$env:CETUS_CHANNEL="beta"; irm https://cetus.cenvero.org/install.ps1 | iex</code>
+        <button onclick="copyCmd(this,'$env:CETUS_CHANNEL=&quot;beta&quot;; irm https://cetus.cenvero.org/install.ps1 | iex')">copy</button>
+      </div>
+      <p class="install-note"># Run from PowerShell. Installs cetus.exe and adds it to PATH.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<div class="section">
+  <div class="section-label">What it does</div>
+  <h2 class="section-title">Everything needed to turn HTML into video</h2>
+  <p class="section-sub">Cetus gives designers, developers, and AI agents a stable render target: write one HTML file, preview it locally, then render exact frames into video.</p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="box"></i></div>
+      <h3>Single binary</h3>
+      <p>Chrome headless shell and ffmpeg are embedded per platform and extracted once into <code>~/.cenvero-cetus</code>.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="scan-line"></i></div>
+      <h3>Deterministic frames</h3>
+      <p>Cetus seeks clips, CSS/Web Animations, GSAP timelines, media, custom hooks, fonts, images, and paint before capture.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="layout-template"></i></div>
+      <h3>Browser-native scenes</h3>
+      <p>Use HTML, CSS, video, canvas, WebGL, Three.js, and GSAP without React, Vite, Node.js, or a render farm.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="sparkles"></i></div>
+      <h3>AI-ready workflow</h3>
+      <p>The Build with AI tool generates prompts for ChatGPT, Codex, Claude Code, and terminal agents that produce valid Cetus HTML.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="film"></i></div>
+      <h3>MP4 and WebM</h3>
+      <p>Pipe captured PNG frames into bundled ffmpeg and write H.264 MP4 or VP9 WebM from the same composition file.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="monitor-play"></i></div>
+      <h3>Live preview</h3>
+      <p>Serve a composition locally with live reload, then render the exact same file from the command line.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="refresh-cw"></i></div>
+      <h3>Self-updating</h3>
+      <p>Direct installs can run <code>cetus update check</code> and <code>cetus update apply</code>. Homebrew installs stay with Homebrew.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="shield-check"></i></div>
+      <h3>Verified releases</h3>
+      <p>Installers use the release manifest, platform-specific archives, and SHA-256 checks before replacing the binary.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon"><i data-lucide="sliders-horizontal"></i></div>
+      <h3>Render overrides</h3>
+      <p>Keep width, height, duration, and FPS in the HTML root, or override FPS and dimensions from the CLI when needed.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <div class="section-label">Quick start</div>
+  <h2 class="section-title">A video render in minutes</h2>
+  <div class="qs-grid">
+    <div>
+      <div class="code-wrap">
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        <pre><span class="c"># 1. Install Cetus</span>
+curl -fsSL https://cetus.cenvero.org/install | sh
+
+<span class="c"># macOS Homebrew</span>
+brew tap cenvero/cetus
+brew install cenvero-cetus</pre>
+      </div>
+      <div class="code-wrap">
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        <pre><span class="c"># 2. Preview while editing</span>
+cetus preview cetus.html
+
+<span class="c"># Optional: generate a prompt</span>
+open https://cetus.cenvero.org/build-with-ai/</pre>
+      </div>
+    </div>
+    <div>
+      <div class="code-wrap">
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        <pre><span class="c"># 3. Render MP4 or WebM</span>
+cetus render cetus.html -o out.mp4
+cetus render cetus.html -o out.webm
+
+<span class="c"># Override only when needed</span>
+cetus render cetus.html -o out.mp4 <span class="flag">--fps</span> 60</pre>
+      </div>
+      <div class="code-wrap">
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        <pre><span class="c"># 4. Keep it current</span>
+cetus update check
+cetus update apply
+
+<span class="c"># Verify the installed binary</span>
+cetus version</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<footer>
+  <div>(c) 2026 Cenvero - AGPL-3.0-or-later</div>
+  <div class="footer-links">
+    <a href="/docs/">Docs</a>
+    <a href="/build-with-ai/">Build with AI</a>
+    <a href="https://github.com/cenvero/cetus">GitHub</a>
+    <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+    <a href="mailto:security@cenvero.org">security@cenvero.org</a>
+  </div>
+</footer>
+
+<script>
+  function detectOS() {
+    const ua = navigator.userAgent;
+    if (/Windows/i.test(ua)) return "windows";
+    if (/Mac|iPhone|iPad|iPod/i.test(ua) && !/Android/i.test(ua)) return "mac";
+    return "linux";
+  }
+
+  function switchOS(os) {
+    document.querySelectorAll(".os-tab").forEach(function(tab) {
+      tab.classList.toggle("active", tab.dataset.os === os);
+    });
+    document.querySelectorAll(".os-panel").forEach(function(panel) {
+      panel.classList.toggle("active", panel.dataset.os === os);
+    });
+  }
+
+  function copyCmd(btn, text) {
+    navigator.clipboard.writeText(text).then(function() {
+      const original = btn.textContent;
+      btn.textContent = "copied!";
+      setTimeout(function() {
+        btn.textContent = original;
+      }, 1800);
+    });
+  }
+
+  function toggleMenu() {
+    document.getElementById("nav-mobile").classList.toggle("open");
+  }
+
+  function copyCode(btn) {
+    const pre = btn.nextElementSibling;
+    navigator.clipboard.writeText(pre.innerText).then(function() {
+      btn.textContent = "copied!";
+      setTimeout(function() {
+        btn.textContent = "copy";
+      }, 1800);
+    });
+  }
+
+  switchOS(detectOS());
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+</script>
 </body>
 </html>
