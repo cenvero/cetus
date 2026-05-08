@@ -1,17 +1,44 @@
 {
-  "generated_at": "2026-05-08T15:08:23Z",
+  "generated_at": "2026-05-08T16:53:30Z",
   "channels": {
     "stable": {
-      "version": "v0.1.0",
-      "release_date": "2026-05-08T15:08:23Z",
+      "version": "v0.2.0",
+      "release_date": "2026-05-08T16:53:30Z",
       "min_supported": "v0.1.0",
-      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.1.0",
+      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.2.0",
       "history": [
+        "v0.2.0",
         "v0.1.0"
       ]
     }
   },
   "binaries": {
-    "v0.1.0": {}
+    "v0.1.0": {},
+    "v0.2.0": {
+      "windows-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_windows_amd64.zip",
+        "sha256": "15786abe2a0cc0140d43c55784d6f3bcf66b0bb885335b9d8d68db62e09047d8",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_windows_amd64.zip.minisig",
+        "size": 109107185
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_darwin_arm64.tar.gz",
+        "sha256": "80fe06cf4c71cdf621c4373047b89725c59d3622e038364891eecfd9987bc0e4",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_darwin_arm64.tar.gz.minisig",
+        "size": 76267574
+      },
+      "darwin-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_darwin_amd64.tar.gz",
+        "sha256": "0882e3ae176e6b99355787f9087ab1a881dd72f2e96c72acd7177b2af834b4a8",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_darwin_amd64.tar.gz.minisig",
+        "size": 86480677
+      },
+      "linux-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_linux_amd64.tar.gz",
+        "sha256": "50fb57e6dad217a051eea00c6bbee6e92abcd16fe3d4e2c7767a57d53f5a875d",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.2.0/cetus_v0.2.0_linux_amd64.tar.gz.minisig",
+        "size": 126414034
+      }
+    }
   }
 }
