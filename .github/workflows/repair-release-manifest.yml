@@ -1,0 +1,90 @@
+name: repair-release-manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag/version, e.g. v0.4.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-manifest:
+    name: Repair release manifest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          gh release download "${VERSION}" \
+            --repo "${{ github.repository }}" \
+            -D dist
+
+      - name: Debug artifacts
+        run: |
+          echo "=== Archive entries in artifacts.json ==="
+          jq '[.[] | select(.type == "Archive" or .type == "Zip") | {type, name, goos, goarch, binary: (.extra.Binary // .extra.Binaries[0])}]' dist/artifacts.json
+
+      - name: Select channel
+        id: channel
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if printf '%s' "${VERSION}" | grep -Eq -- '-alpha\.'; then
+            echo "value=alpha" >> "${GITHUB_OUTPUT}"
+          elif printf '%s' "${VERSION}" | grep -Eq -- '-(beta|rc)\.'; then
+            echo "value=beta" >> "${GITHUB_OUTPUT}"
+          else
+            echo "value=stable" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Sync signing key files
+        env:
+          FLEET_MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
+        run: ./scripts/sync-signing-key.sh
+
+      - name: Update manifest metadata
+        env:
+          FLEET_VERSION: ${{ inputs.version }}
+          FLEET_CHANNEL: ${{ steps.channel.outputs.value }}
+          FLEET_RELEASE_NOTES_URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.version }}
+          FLEET_REPOSITORY: ${{ github.repository }}
+        run: |
+          export FLEET_RELEASE_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ./scripts/update-manifest.sh
+
+      - name: Validate generated manifest
+        env:
+          FLEET_VERSION: ${{ inputs.version }}
+          FLEET_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/validate-release-manifest.sh
+
+      - name: Commit manifest
+        run: |
+          git config user.name "cenvero-bot"
+          git config user.email "276044322+cenvero-bot@users.noreply.github.com"
+
+          git add public/manifest.json public/signing.pub public/install.sh public/install.ps1 internal/update/signing.pub
+
+          if git diff --cached --quiet; then
+            echo "No manifest changes"
+            exit 0
+          fi
+
+          git commit -m "chore(release): repair manifest for ${{ inputs.version }}"
+          git pull --rebase origin main
+          git push origin HEAD:main
