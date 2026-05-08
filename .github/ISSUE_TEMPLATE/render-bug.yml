@@ -1,0 +1,81 @@
+name: Render bug
+description: Report wrong frames, missing text, browser errors, ffmpeg errors, or bad output video.
+title: "[render]: "
+labels:
+  - bug
+  - render
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for issues where Cetus installs but the rendered video is wrong, incomplete, missing frames/text, or fails during browser/ffmpeg capture.
+
+        If possible, attach a minimal `cetus.html` that reproduces the problem.
+  - type: input
+    id: version
+    attributes:
+      label: Cetus version
+      description: Output of `cetus version`.
+      placeholder: "cetus 0.3.0 (...)"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS version and architecture
+      placeholder: "Example: macOS 15.5 arm64, Ubuntu 24.04 amd64, Windows 11 amd64"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Render command
+      render: sh
+      placeholder: "cetus render cetus.html -o out.mp4"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Full terminal output
+      description: Include progress output and the final error if any.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: "What should the video show?"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      placeholder: "What happened instead? Example: only background rendered, text appears on one frame, video exits midway."
+    validations:
+      required: true
+  - type: textarea
+    id: composition
+    attributes:
+      label: Minimal composition HTML
+      description: Paste a small reproducer if possible. If the file is large, attach it or link to a gist/repo.
+      render: html
+  - type: checkboxes
+    id: assets
+    attributes:
+      label: Assets used
+      options:
+        - label: The render uses local images.
+        - label: The render uses local video/audio.
+        - label: The render loads remote fonts/assets.
+        - label: The render uses CSS/Web Animations.
+        - label: The render uses GSAP timelines.
+        - label: The render uses canvas/WebGL/Three.js/custom JavaScript.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or sample output
+      description: Attach screenshots, the output video, extracted frames, or any other context that helps debug the render.

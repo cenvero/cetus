@@ -1,0 +1,72 @@
+name: Install or update problem
+description: Report a problem installing, updating, or launching Cetus.
+title: "[install]: "
+labels:
+  - install
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Cetus. This is an early release and currently supports a limited set of OS/architecture combinations, so install issues can happen.
+
+        Please include the exact command output. It is usually the fastest way to diagnose installer, PATH, archive, signature, or platform problems.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version and architecture
+      placeholder: "Example: macOS 15.5 arm64, Ubuntu 24.04 amd64, Windows 11 amd64"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      options:
+        - curl install script
+        - PowerShell install script
+        - Homebrew
+        - GitHub release archive
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: Paste the exact install/update/version command.
+      render: sh
+      placeholder: "curl -fsSL https://cetus.cenvero.org/install | sh"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Full output or error
+      description: Paste the full terminal output. Redact secrets if needed.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Cetus version
+      description: Run `cetus version` if the binary installed.
+      placeholder: "cetus 0.3.0 (...)"
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Include proxy/firewall details, custom install directories, antivirus warnings, or screenshots if useful.

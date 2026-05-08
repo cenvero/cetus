@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Cetus documentation
+    url: https://cetus.cenvero.org/docs/
+    about: Read install, render, preview, and update docs before filing an issue.
+  - name: Security reports
+    url: mailto:security@cenvero.org
+    about: Please do not open public issues for security vulnerabilities.

@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest a new capability, template, format, platform, or workflow.
+title: "[feature]: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Cetus is early, so concrete use cases are especially helpful.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to make or automate?
+      placeholder: "I want to render..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should Cetus do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Rendering
+        - Install/update
+        - Templates/examples
+        - Build with AI
+        - Docs
+        - Platform support
+        - Output formats
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried another tool or workaround?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, sample HTML, or workflow notes.
