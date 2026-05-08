@@ -12,6 +12,9 @@ CHROME_VERSION="${CHROME_VERSION:-133.0.6943.98}"
 # macOS arm64 uses the pinned GitHub release asset from eugeneware/ffmpeg-static.
 # Keep this tag in sync with ffmpeg_sha256().
 FFMPEG_STATIC_TAG="b6.1.1"
+# Linux amd64 uses a pinned GitHub release asset from BtbN/FFmpeg-Builds,
+# which is linked from FFmpeg's official download page.
+BTBN_FFMPEG_TAG="autobuild-2026-05-07-13-30"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM_DIR="${ROOT_DIR}/internal/assets/${GOOS_TARGET}-${GOARCH_TARGET}"
 WORK_DIR="$(mktemp -d)"
@@ -49,7 +52,7 @@ chrome_platform() {
 
 ffmpeg_url() {
   case "$GOOS_TARGET/$GOARCH_TARGET" in
-    linux/amd64) echo "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" ;;
+    linux/amd64) echo "https://github.com/BtbN/FFmpeg-Builds/releases/download/${BTBN_FFMPEG_TAG}/ffmpeg-n8.1.1-linux64-gpl-8.1.tar.xz" ;;
     linux/arm64) echo "unsupported target: linux/arm64; Chrome for Testing does not publish chrome-headless-shell for this target" >&2; exit 1 ;;
     darwin/amd64) echo "https://evermeet.cx/ffmpeg/getrelease/zip" ;;
     darwin/arm64) echo "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_STATIC_TAG}/ffmpeg-darwin-arm64" ;;
@@ -60,6 +63,7 @@ ffmpeg_url() {
 
 ffmpeg_sha256() {
   case "$GOOS_TARGET/$GOARCH_TARGET" in
+    linux/amd64) echo "09522a2b57e4881ddef6ca6a30803ed9e4ae8de93480f8690f98c6df858c09d6" ;;
     darwin/arm64) echo "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584" ;;
     *) echo "" ;;
   esac
