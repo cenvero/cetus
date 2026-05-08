@@ -5,16 +5,20 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/cenvero/cetus/internal/compose"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
 
 type Browser struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx           context.Context
+	cancel        context.CancelFunc
+	useBeginFrame bool
 }
 
 type Options struct {
@@ -63,7 +67,35 @@ func New(ctx context.Context, htmlPath string, composition *compose.Composition,
 		return nil, err
 	}
 
-	loadCtx, loadCancel := context.WithTimeout(browserCtx, 60*time.Second)
+	// The first chromedp.Run allocates Chrome; keep it on the long-lived context
+	// so the page-load timeout below does not tear down the browser after load.
+	if err := chromedp.Run(browserCtx); err != nil {
+		cancel()
+		return nil, fmt.Errorf("start browser: %w", err)
+	}
+
+	useBeginFrame := runtime.GOOS != "darwin"
+	renderCtx := browserCtx
+	if useBeginFrame {
+		targetID, err := createRenderTarget(browserCtx, composition)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		targetCtx, targetCancel := chromedp.NewContext(browserCtx, chromedp.WithTargetID(targetID))
+		cancel = func() {
+			targetCancel()
+			browserCancel()
+			allocCancel()
+		}
+		if err := chromedp.Run(targetCtx); err != nil {
+			cancel()
+			return nil, fmt.Errorf("attach render target: %w", err)
+		}
+		renderCtx = targetCtx
+	}
+
+	loadCtx, loadCancel := context.WithTimeout(renderCtx, 60*time.Second)
 	defer loadCancel()
 
 	if err := chromedp.Run(loadCtx,
@@ -82,7 +114,7 @@ func New(ctx context.Context, htmlPath string, composition *compose.Composition,
 		return nil, fmt.Errorf("load composition in browser: %w", err)
 	}
 
-	return &Browser{ctx: browserCtx, cancel: cancel}, nil
+	return &Browser{ctx: renderCtx, cancel: cancel, useBeginFrame: useBeginFrame}, nil
 }
 
 func (b *Browser) Close() {
@@ -102,4 +134,31 @@ func compositionFileURL(path string) (string, error) {
 	}
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}
 	return u.String(), nil
+}
+
+func createRenderTarget(ctx context.Context, composition *compose.Composition) (target.ID, error) {
+	var targetID target.ID
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		c := chromedp.FromContext(ctx)
+		if c == nil || c.Browser == nil {
+			return fmt.Errorf("browser is unavailable")
+		}
+		id, err := target.CreateTarget("about:blank").
+			WithWidth(int64(composition.Width)).
+			WithHeight(int64(composition.Height)).
+			WithEnableBeginFrameControl(true).
+			Do(cdp.WithExecutor(ctx, c.Browser))
+		if err != nil {
+			return fmt.Errorf("create render target: %w", err)
+		}
+		targetID = id
+		return nil
+	}))
+	if err != nil {
+		return "", err
+	}
+	if targetID == "" {
+		return "", fmt.Errorf("create render target returned empty target id")
+	}
+	return targetID, nil
 }

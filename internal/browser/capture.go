@@ -8,6 +8,7 @@ import (
 	"github.com/cenvero/cetus/internal/compose"
 	"github.com/cenvero/cetus/internal/encoder"
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/page"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -44,7 +45,7 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 			return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
 		}
 
-		png, err := beginFrame(b.ctx, t)
+		png, err := b.captureFrame(t)
 		if err != nil {
 			return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
 		}
@@ -67,11 +68,23 @@ func reportCaptureProgress(progress CaptureProgressFunc, completedFrames, totalF
 	}
 }
 
+func (b *Browser) captureFrame(t float64) ([]byte, error) {
+	if b.useBeginFrame {
+		return beginFrame(b.ctx, t)
+	}
+	return captureScreenshot(b.ctx)
+}
+
 func awaitPromise(p *cdpruntime.EvaluateParams) *cdpruntime.EvaluateParams {
 	return p.WithAwaitPromise(true)
 }
 
 func beginFrame(ctx context.Context, t float64) ([]byte, error) {
+	targetCtx, err := targetExecutorContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var result struct {
 		HasDamage      bool   `json:"hasDamage"`
 		ScreenshotData []byte `json:"screenshotData"`
@@ -83,13 +96,40 @@ func beginFrame(ctx context.Context, t float64) ([]byte, error) {
 			"quality": 100,
 		},
 	}
-	if err := cdp.Execute(ctx, "HeadlessExperimental.beginFrame", params, &result); err != nil {
+	if err := cdp.Execute(targetCtx, "HeadlessExperimental.beginFrame", params, &result); err != nil {
 		return nil, fmt.Errorf("call HeadlessExperimental.beginFrame: %w", err)
 	}
 	if len(result.ScreenshotData) == 0 {
 		return nil, fmt.Errorf("HeadlessExperimental.beginFrame returned no screenshot data")
 	}
 	return result.ScreenshotData, nil
+}
+
+func captureScreenshot(ctx context.Context) ([]byte, error) {
+	targetCtx, err := targetExecutorContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	png, err := page.CaptureScreenshot().
+		WithFormat(page.CaptureScreenshotFormatPng).
+		WithFromSurface(true).
+		Do(targetCtx)
+	if err != nil {
+		return nil, fmt.Errorf("capture page screenshot: %w", err)
+	}
+	if len(png) == 0 {
+		return nil, fmt.Errorf("Page.captureScreenshot returned no screenshot data")
+	}
+	return png, nil
+}
+
+func targetExecutorContext(ctx context.Context) (context.Context, error) {
+	c := chromedp.FromContext(ctx)
+	if c == nil || c.Target == nil {
+		return nil, fmt.Errorf("browser target is unavailable")
+	}
+	return cdp.WithExecutor(ctx, c.Target), nil
 }
 
 func buildSeekScript(t float64) string {
