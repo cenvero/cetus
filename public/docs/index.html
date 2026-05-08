@@ -103,6 +103,7 @@ cetus update check
 cetus update apply
 cetus version</code></pre>
           <p><code>cetus.html</code> is the recommended default filename. Cetus accepts any HTML file path.</p>
+          <p>Render commands print live progress to stderr, including asset preparation, browser launch, frame count, elapsed time, ETA, and final encoding. The final <code>Rendered ...</code> line stays on stdout for scripts.</p>
           <table>
             <tr><th>Flag</th><th>Use</th></tr>
             <tr><td><code>-o, --output</code></td><td>Required output path.</td></tr>
@@ -218,6 +219,7 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
   -> capture PNG frame
   -> pipe frames to embedded ffmpeg
   -> write MP4 or WebM</code></pre>
+          <p>While this runs, the terminal shows each major stage plus periodic <code>Rendering frames: captured/total</code> updates so a slow render is visibly moving.</p>
         </section>
 
         <section id="preview">
@@ -226,6 +228,7 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
           <pre><code>cetus preview cetus.html
 cetus preview cetus.html --port 8080
 cetus preview cetus.html --no-open</code></pre>
+          <p>The terminal shows the preview path, local URL, watched directory count, browser launch, and live-reload events after file changes.</p>
         </section>
 
         <section id="updates">

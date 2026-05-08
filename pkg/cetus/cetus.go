@@ -69,7 +69,7 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 	}
 	defer b.Close()
 
-	if err := b.Capture(ctx, composition, enc); err != nil {
+	if err := b.Capture(ctx, composition, enc, nil); err != nil {
 		_ = enc.Close()
 		return err
 	}

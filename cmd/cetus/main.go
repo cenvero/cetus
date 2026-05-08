@@ -68,11 +68,16 @@ func newRenderCommand() *cobra.Command {
 			}
 
 			start := time.Now()
-			chromePath, ffmpegPath, err := assets.EnsureAssets(version.Version)
+			progress := newRenderProgressLogger(cmd.ErrOrStderr())
+
+			chromePath, ffmpegPath, err := assets.EnsureAssetsWithProgress(version.Version, func(event assets.ProgressEvent) {
+				progress.Stage("%s...", event.Message)
+			})
 			if err != nil {
 				return err
 			}
 
+			progress.Stage("Parsing composition...")
 			composition, err := compose.Parse(input)
 			if err != nil {
 				return err
@@ -85,6 +90,16 @@ func newRenderCommand() *cobra.Command {
 			if err := composition.ApplyOverrides(fpsOverride, width, height); err != nil {
 				return err
 			}
+			progress.Stage(
+				"Composition %q: %dx%d, %.2fs at %d fps (%d frames, %d clips)",
+				composition.ID,
+				composition.Width,
+				composition.Height,
+				composition.Duration,
+				composition.FPS,
+				composition.TotalFrames,
+				len(composition.Clips),
+			)
 
 			resolvedFormat, err := encoder.ResolveFormat(output, format)
 			if err != nil {
@@ -94,11 +109,13 @@ func newRenderCommand() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(timeoutSeconds)*time.Second)
 			defer cancel()
 
+			progress.Stage("Starting %s encoder...", resolvedFormat)
 			enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat)
 			if err != nil {
 				return err
 			}
 
+			progress.Stage("Opening headless browser...")
 			b, err := browser.New(ctx, input, composition, browser.Options{
 				ChromePath: chromePath,
 				NoGPU:      noGPU,
@@ -109,10 +126,12 @@ func newRenderCommand() *cobra.Command {
 			}
 			defer b.Close()
 
-			if err := b.Capture(ctx, composition, enc); err != nil {
+			progress.Stage("Starting frame rendering...")
+			if err := b.Capture(ctx, composition, enc, progress.Frames); err != nil {
 				_ = enc.Close()
 				return err
 			}
+			progress.Stage("Finalizing %s output...", resolvedFormat)
 			if err := enc.Close(); err != nil {
 				return err
 			}

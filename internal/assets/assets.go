@@ -18,10 +18,22 @@ const (
 	ffmpegWindowsName = "ffmpeg.exe"
 )
 
+type ProgressEvent struct {
+	Message string
+}
+
+type ProgressFunc func(ProgressEvent)
+
 func EnsureAssets(version string) (chromePath, ffmpegPath string, err error) {
+	return EnsureAssetsWithProgress(version, nil)
+}
+
+func EnsureAssetsWithProgress(version string, progress ProgressFunc) (chromePath, ffmpegPath string, err error) {
 	if version == "" {
 		version = "dev"
 	}
+
+	reportProgress(progress, "Checking renderer assets")
 
 	cacheRoot, err := os.UserCacheDir()
 	if err != nil {
@@ -37,14 +49,21 @@ func EnsureAssets(version string) (chromePath, ffmpegPath string, err error) {
 	ffmpegPath = filepath.Join(cacheDir, ffmpegExeName())
 
 	if executableExists(chromePath) && executableExists(ffmpegPath) {
+		reportProgress(progress, "Renderer assets ready")
 		return chromePath, ffmpegPath, nil
 	}
 
-	if err := decompressAsset(headlessShellData, chromePath); err != nil {
-		return "", "", fmt.Errorf("extract chrome headless shell: %w", err)
+	if !executableExists(chromePath) {
+		reportProgress(progress, "Extracting embedded browser")
+		if err := decompressAsset(headlessShellData, chromePath); err != nil {
+			return "", "", fmt.Errorf("extract chrome headless shell: %w", err)
+		}
 	}
-	if err := decompressAsset(ffmpegData, ffmpegPath); err != nil {
-		return "", "", fmt.Errorf("extract ffmpeg: %w", err)
+	if !executableExists(ffmpegPath) {
+		reportProgress(progress, "Extracting embedded ffmpeg")
+		if err := decompressAsset(ffmpegData, ffmpegPath); err != nil {
+			return "", "", fmt.Errorf("extract ffmpeg: %w", err)
+		}
 	}
 	if err := os.Chmod(chromePath, 0o700); err != nil { // #nosec G302 -- cached browser binary must be executable by the current user.
 		return "", "", fmt.Errorf("mark chrome executable: %w", err)
@@ -53,7 +72,14 @@ func EnsureAssets(version string) (chromePath, ffmpegPath string, err error) {
 		return "", "", fmt.Errorf("mark ffmpeg executable: %w", err)
 	}
 
+	reportProgress(progress, "Renderer assets ready")
 	return chromePath, ffmpegPath, nil
+}
+
+func reportProgress(progress ProgressFunc, message string) {
+	if progress != nil {
+		progress(ProgressEvent{Message: message})
+	}
 }
 
 func chromeExeName() string {

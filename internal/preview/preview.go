@@ -40,6 +40,8 @@ func ServeContext(ctx context.Context, htmlPath string, port int, noOpen bool) e
 		return fmt.Errorf("preview input must be a file")
 	}
 
+	fmt.Printf("Preparing preview for %s\n", absHTML)
+
 	listener, err := listen(port)
 	if err != nil {
 		return err
@@ -62,7 +64,7 @@ func ServeContext(ctx context.Context, htmlPath string, port int, noOpen bool) e
 		serverErr <- nil
 	}()
 
-	watcher, err := startWatcher(absHTML, hub)
+	watcher, watchedDirs, err := startWatcher(absHTML, hub)
 	if err != nil {
 		_ = server.Shutdown(context.Background())
 		return err
@@ -71,7 +73,9 @@ func ServeContext(ctx context.Context, htmlPath string, port int, noOpen bool) e
 
 	url := fmt.Sprintf("http://localhost:%d/", actualPort)
 	fmt.Printf("Preview serving %s at %s\n", absHTML, url)
+	fmt.Printf("Watching %d preview %s for live reload\n", watchedDirs, directoryWord(watchedDirs))
 	if !noOpen {
+		fmt.Println("Opening preview browser...")
 		if err := openBrowser(url); err != nil {
 			log.Printf("open browser: %v", err)
 		}
@@ -213,19 +217,21 @@ func injectReloadScript(data []byte, port int) []byte {
 	return out
 }
 
-func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, error) {
+func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, int, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("create file watcher: %w", err)
+		return nil, 0, fmt.Errorf("create file watcher: %w", err)
 	}
 
 	dirs := referencedAssetDirs(htmlPath)
 	dirs[filepath.Dir(htmlPath)] = struct{}{}
+	watchedDirs := 0
 	for dir := range dirs {
 		if err := watcher.Add(dir); err != nil {
 			_ = watcher.Close()
-			return nil, fmt.Errorf("watch %s: %w", dir, err)
+			return nil, 0, fmt.Errorf("watch %s: %w", dir, err)
 		}
+		watchedDirs++
 	}
 
 	go func() {
@@ -234,6 +240,7 @@ func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, error) {
 			<-timer.C
 		}
 		pending := false
+		lastChanged := ""
 		for {
 			select {
 			case event, ok := <-watcher.Events:
@@ -244,6 +251,7 @@ func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, error) {
 					continue
 				}
 				pending = true
+				lastChanged = event.Name
 				timer.Reset(100 * time.Millisecond)
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -253,13 +261,23 @@ func startWatcher(htmlPath string, hub *hub) (*fsnotify.Watcher, error) {
 			case <-timer.C:
 				if pending {
 					pending = false
+					if lastChanged != "" {
+						log.Printf("preview reload: %s changed", lastChanged)
+					}
 					hub.broadcast("reload")
 				}
 			}
 		}
 	}()
 
-	return watcher, nil
+	return watcher, watchedDirs, nil
+}
+
+func directoryWord(count int) string {
+	if count == 1 {
+		return "directory"
+	}
+	return "directories"
 }
 
 func referencedAssetDirs(htmlPath string) map[string]struct{} {

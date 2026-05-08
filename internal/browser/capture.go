@@ -12,7 +12,15 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func (b *Browser) Capture(ctx context.Context, composition *compose.Composition, enc *encoder.Encoder) error {
+type CaptureProgress struct {
+	CompletedFrames int
+	TotalFrames     int
+	TimeSeconds     float64
+}
+
+type CaptureProgressFunc func(CaptureProgress)
+
+func (b *Browser) Capture(ctx context.Context, composition *compose.Composition, enc *encoder.Encoder, progress CaptureProgressFunc) error {
 	if b == nil {
 		return fmt.Errorf("browser is nil")
 	}
@@ -23,6 +31,7 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 		return fmt.Errorf("encoder is required")
 	}
 
+	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
 	for frame := 0; frame < composition.TotalFrames; frame++ {
 		select {
 		case <-ctx.Done():
@@ -42,9 +51,20 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 		if err := enc.WriteFrame(png); err != nil {
 			return fmt.Errorf("encode frame %d: %w", frame, err)
 		}
+		reportCaptureProgress(progress, frame+1, composition.TotalFrames, t)
 	}
 
 	return nil
+}
+
+func reportCaptureProgress(progress CaptureProgressFunc, completedFrames, totalFrames int, timeSeconds float64) {
+	if progress != nil {
+		progress(CaptureProgress{
+			CompletedFrames: completedFrames,
+			TotalFrames:     totalFrames,
+			TimeSeconds:     timeSeconds,
+		})
+	}
 }
 
 func awaitPromise(p *cdpruntime.EvaluateParams) *cdpruntime.EvaluateParams {

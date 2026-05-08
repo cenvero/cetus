@@ -37,6 +37,12 @@ Self-updates stay on the installed release channel by default. Stable builds
 check stable releases, beta builds check beta releases, and RC builds check RC
 releases.
 
+During render, Cetus prints stage updates and frame progress to stderr:
+asset preparation, composition parsing, browser launch, frame count, elapsed
+time, ETA, and final encoding. The final `Rendered ...` line remains on stdout
+for scripts. Preview prints the served URL, watched directories, browser launch,
+and live-reload events.
+
 If Cetus is installed with Homebrew, updates are handled by Homebrew:
 
 ```sh
