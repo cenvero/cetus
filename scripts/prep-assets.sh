@@ -9,6 +9,9 @@ fi
 GOOS_TARGET="$1"
 GOARCH_TARGET="$2"
 CHROME_VERSION="${CHROME_VERSION:-133.0.6943.98}"
+# macOS arm64 uses the pinned GitHub release asset from eugeneware/ffmpeg-static.
+# Keep this tag in sync with ffmpeg_sha256().
+FFMPEG_STATIC_TAG="b6.1.1"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM_DIR="${ROOT_DIR}/internal/assets/${GOOS_TARGET}-${GOARCH_TARGET}"
 WORK_DIR="$(mktemp -d)"
@@ -49,9 +52,16 @@ ffmpeg_url() {
     linux/amd64) echo "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" ;;
     linux/arm64) echo "unsupported target: linux/arm64; Chrome for Testing does not publish chrome-headless-shell for this target" >&2; exit 1 ;;
     darwin/amd64) echo "https://evermeet.cx/ffmpeg/getrelease/zip" ;;
-    darwin/arm64) echo "https://www.osxexperts.net/ffmpeg71arm.zip" ;;
+    darwin/arm64) echo "https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_STATIC_TAG}/ffmpeg-darwin-arm64" ;;
     windows/amd64) echo "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" ;;
     *) echo "unsupported target: $GOOS_TARGET/$GOARCH_TARGET" >&2; exit 1 ;;
+  esac
+}
+
+ffmpeg_sha256() {
+  case "$GOOS_TARGET/$GOARCH_TARGET" in
+    darwin/arm64) echo "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -63,6 +73,31 @@ download() {
   curl --fail --show-error --location \
     --retry 3 --retry-delay 2 --connect-timeout 30 \
     "${url}" -o "${output}"
+}
+
+verify_sha256() {
+  local file="$1"
+  local expected="$2"
+  local actual
+
+  if [[ -z "${expected}" ]]; then
+    return 0
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "${file}")"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "${file}")"
+  else
+    echo "missing required command: sha256sum or shasum" >&2
+    exit 1
+  fi
+  actual="${actual%% *}"
+
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "sha256 mismatch for ${file}: got ${actual}, want ${expected}" >&2
+    exit 1
+  fi
 }
 
 CHROME_PLATFORM="$(chrome_platform)"
@@ -85,9 +120,11 @@ fi
 brotli -f -q 11 "${CHROME_BIN}" -o "${PLATFORM_DIR}/headless-shell.br"
 
 FFMPEG_URL="$(ffmpeg_url)"
+FFMPEG_SHA256="$(ffmpeg_sha256)"
 FFMPEG_ARCHIVE="${WORK_DIR}/ffmpeg.archive"
 echo "downloading ffmpeg for ${GOOS_TARGET}/${GOARCH_TARGET}"
 download "${FFMPEG_URL}" "${FFMPEG_ARCHIVE}"
+verify_sha256 "${FFMPEG_ARCHIVE}" "${FFMPEG_SHA256}"
 mkdir -p "${WORK_DIR}/ffmpeg"
 
 case "${GOOS_TARGET}" in
@@ -101,7 +138,11 @@ case "${GOOS_TARGET}" in
     brotli -f -q 11 "${FFMPEG_BIN}" -o "${PLATFORM_DIR}/ffmpeg.br"
     ;;
   darwin)
-    unzip -q "${FFMPEG_ARCHIVE}" -d "${WORK_DIR}/ffmpeg"
+    if [[ "${GOARCH_TARGET}" == "arm64" ]]; then
+      cp "${FFMPEG_ARCHIVE}" "${WORK_DIR}/ffmpeg/ffmpeg"
+    else
+      unzip -q "${FFMPEG_ARCHIVE}" -d "${WORK_DIR}/ffmpeg"
+    fi
     FFMPEG_BIN="$(find "${WORK_DIR}/ffmpeg" -type f -name ffmpeg | head -n 1)"
     if [[ -z "${FFMPEG_BIN}" ]]; then
       echo "ffmpeg binary not found in archive" >&2
