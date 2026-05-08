@@ -219,6 +219,7 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
   -> capture PNG frame
   -> pipe frames to embedded ffmpeg
   -> write MP4 or WebM</code></pre>
+          <p>On first render, Cetus extracts its embedded browser bundle and ffmpeg into <code>~/.cenvero-cetus/&lt;version&gt;</code>. If the browser bundle is incomplete, Cetus repairs that cache by extracting it again.</p>
           <p>While this runs, the terminal shows each major stage plus periodic <code>Rendering frames: captured/total</code> updates so a slow render is visibly moving.</p>
         </section>
 

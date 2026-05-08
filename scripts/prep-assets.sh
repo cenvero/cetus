@@ -32,6 +32,7 @@ need() {
 }
 
 need curl
+need tar
 need unzip
 
 log() {
@@ -126,8 +127,11 @@ if [[ -z "${CHROME_BIN}" ]]; then
   echo "chrome-headless-shell binary not found in archive" >&2
   exit 1
 fi
-log "compressing embedded browser with brotli -q 11"
-brotli -f -q 11 "${CHROME_BIN}" -o "${PLATFORM_DIR}/headless-shell.br"
+CHROME_BUNDLE_TAR="${WORK_DIR}/chrome-headless-shell.tar"
+log "packing chrome bundle"
+tar -cf "${CHROME_BUNDLE_TAR}" -C "${WORK_DIR}/chrome" .
+log "compressing embedded browser bundle with brotli -q 11"
+brotli -f -q 11 "${CHROME_BUNDLE_TAR}" -o "${PLATFORM_DIR}/headless-shell.br"
 log "embedded browser ready"
 
 FFMPEG_URL="$(ffmpeg_url)"

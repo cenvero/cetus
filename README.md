@@ -2,7 +2,7 @@
 
 Cetus is a self-contained CLI tool that renders HTML compositions into video files.
 It ships a platform-specific headless browser and static ffmpeg binary inside one
-Go executable, extracts them once into the user cache, and renders frames
+Go executable, extracts them once into `~/.cenvero-cetus`, and renders frames
 deterministically through Chrome DevTools Protocol.
 
 ## Install
