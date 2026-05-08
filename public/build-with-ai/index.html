@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prompt Generator - Cetus</title>
+  <meta name="description" content="Generate an AI prompt for Cetus HTML video compositions from websites, product ideas, intros, and templates.">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #030508;
+      --panel: #0d1418;
+      --panel-2: #111b20;
+      --text: #edf7f5;
+      --muted: #99aaa6;
+      --line: #213139;
+      --accent: #00ebb8;
+      --accent-soft: rgba(0, 235, 184, 0.14);
+      --danger: #ff6b7a;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); letter-spacing: 0; }
+    a { color: inherit; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { border-bottom: 1px solid var(--line); background: rgba(3, 5, 8, 0.92); position: sticky; top: 0; z-index: 5; }
+    nav { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; }
+    .mark { width: 28px; height: 28px; border: 1px solid var(--accent); background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); font-family: var(--mono); font-size: 13px; }
+    .links { display: flex; gap: 18px; color: var(--muted); font-size: 14px; }
+    main { padding: 64px 0; }
+    .hero { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr); gap: 40px; align-items: start; margin-bottom: 48px; }
+    h1 { margin: 0; font-size: clamp(42px, 7vw, 76px); line-height: 0.98; letter-spacing: 0; }
+    .lead { color: var(--muted); font-size: 19px; line-height: 1.6; margin: 20px 0 0; }
+    .panel { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 20px; }
+    .panel h2 { margin-top: 0; }
+    h2 { margin: 0 0 14px; font-size: 26px; letter-spacing: 0; }
+    h3 { margin: 22px 0 10px; font-size: 18px; }
+    p, li { color: var(--muted); line-height: 1.62; }
+    ul { padding-left: 20px; }
+    code, pre, textarea, input, select { font-family: var(--mono); }
+    code { color: var(--accent); }
+    .generator { display: grid; grid-template-columns: minmax(320px, 0.88fr) minmax(0, 1.12fr); gap: 24px; align-items: stretch; }
+    form { display: grid; gap: 18px; }
+    .form-section { border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 16px; }
+    .form-section:first-child { border-top: 0; padding-top: 0; }
+    .section-title { color: var(--accent); font: 650 12px var(--mono); text-transform: uppercase; }
+    .field { display: grid; gap: 8px; }
+    label { color: var(--text); font-size: 14px; font-weight: 650; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #05090c;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    textarea { min-height: 118px; resize: vertical; }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+    button, .link-button {
+      border: 1px solid var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 8px;
+      padding: 10px 13px;
+      font: 650 13px var(--sans);
+      cursor: pointer;
+      text-decoration: none;
+      min-height: 40px;
+    }
+    button.secondary, .link-button.secondary { border-color: var(--line); background: var(--panel-2); color: var(--text); }
+    .output { min-height: 100%; display: grid; grid-template-rows: auto 1fr; gap: 12px; }
+    .output-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    #promptOutput { min-height: 720px; white-space: pre-wrap; }
+    .band { border-top: 1px solid var(--line); padding: 40px 0; }
+    .templates, .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .template, .control { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 18px; min-height: 150px; }
+    .template h3, .control h3 { margin-top: 0; }
+    pre { margin: 16px 0 0; padding: 18px; overflow: auto; border: 1px solid var(--line); background: #05090c; color: #d6e9e5; font-size: 13px; line-height: 1.55; border-radius: 8px; white-space: pre-wrap; }
+    .status { color: var(--accent); font-size: 13px; min-height: 18px; }
+    footer { color: var(--muted); border-top: 1px solid var(--line); padding: 28px 0; font-size: 14px; }
+    @media (max-width: 980px) {
+      .hero, .generator, .templates, .controls { grid-template-columns: 1fr; }
+      #promptOutput { min-height: 520px; }
+      .links { display: none; }
+    }
+    @media (max-width: 560px) {
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="wrap">
+      <a class="brand" href="/"><span class="mark">C</span> Cetus</a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/build-with-ai/">Build with AI</a>
+        <a href="https://github.com/cenvero/cetus">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="wrap hero">
+      <div>
+        <h1>Prompt Generator</h1>
+        <p class="lead">Fill in a website, app, brand, product, script, or rough idea, choose the video controls, then copy a complete AI prompt for generating a Cetus HTML composition.</p>
+      </div>
+      <div class="panel">
+        <h2>Static by Design</h2>
+        <p>This page runs only in your browser. It does not call an AI model. It builds a clear prompt you can paste into ChatGPT, Codex, Claude, Gemini, or another coding assistant.</p>
+        <p>Website, scenes, assets, and notes are optional. Leave them blank and the generated prompt will tell the AI to ask only when needed or create a polished plan itself.</p>
+        <p>For the Cetus file format and CLI flags, read <a href="/docs/">the docs</a>.</p>
+      </div>
+    </section>
+
+    <section class="wrap generator" aria-label="Cetus AI prompt generator">
+      <div class="panel">
+        <h2>Video Brief</h2>
+        <form id="promptForm">
+          <div class="form-section">
+            <div class="section-title">Assistant</div>
+            <div class="row">
+              <div class="field">
+                <label for="targetTool">Where Will You Paste It?</label>
+                <select id="targetTool" name="targetTool">
+                  <option value="generic-chatbot" selected>ChatGPT or generic chatbot</option>
+                  <option value="codex">Codex</option>
+                  <option value="claude-code">Claude Code</option>
+                  <option value="terminal-agent">Other terminal agent</option>
+                  <option value="custom-agent">Custom coding assistant</option>
+                </select>
+                <div class="hint">Chooses code block output or direct file creation.</div>
+              </div>
+              <div class="field">
+                <label for="agentAccess">Agent Access</label>
+                <select id="agentAccess" name="agentAccess">
+                  <option value="ask-first" selected>Ask before browsing or running commands</option>
+                  <option value="can-browse">Can inspect links I provide</option>
+                  <option value="local-only">No internet, use only pasted info</option>
+                  <option value="can-run">Can run terminal commands</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-title">Source</div>
+            <div class="field">
+              <label for="sourceRef">Website, App, Product, Brand, or Script</label>
+              <textarea id="sourceRef" name="sourceRef" placeholder="Optional. Paste a website URL, app name, product notes, brand copy, video script, or links to screenshots/assets."></textarea>
+              <div class="hint">Optional. Leave blank if you want the assistant to ask for source material.</div>
+            </div>
+
+            <div class="field">
+              <label for="instruction">Instruction or Idea</label>
+              <textarea id="instruction" name="instruction" placeholder="Turn this into a short launch video with a clean SaaS feel. Show the hero, three benefits, and a final call to action."></textarea>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-title">Creative Direction</div>
+            <div class="row">
+              <div class="field">
+                <label for="videoType">Video Type</label>
+                <select id="videoType" name="videoType">
+                  <option>Website launch</option>
+                  <option>Product demo</option>
+                  <option>App intro</option>
+                  <option>Brand intro</option>
+                  <option>Social reel</option>
+                  <option>Explainer</option>
+                  <option>Course intro</option>
+                  <option>Custom</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="style">Style</label>
+                <select id="style" name="style">
+                  <option>Clean SaaS</option>
+                  <option>Technical and minimal</option>
+                  <option>Bold launch</option>
+                  <option>Cinematic</option>
+                  <option>Editorial</option>
+                  <option>Playful</option>
+                  <option>Luxury</option>
+                  <option>Custom from my instructions</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="sceneMode">Scene Planning</label>
+                <select id="sceneMode" name="sceneMode">
+                  <option value="generate" selected>Let AI generate scenes</option>
+                  <option value="improve">Improve my rough scenes</option>
+                  <option value="exact">Use my scenes exactly</option>
+                  <option value="ask-if-missing">Ask only if scenes are missing</option>
+                </select>
+                <div class="hint">Scenes are optional. The assistant can create them.</div>
+              </div>
+              <div class="field">
+                <label for="pacing">Pacing</label>
+                <select id="pacing" name="pacing">
+                  <option>Balanced</option>
+                  <option>Fast and punchy</option>
+                  <option>Calm and premium</option>
+                  <option>Detailed and explanatory</option>
+                  <option>Custom from my instructions</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="scenes">Scenes or Beats</label>
+              <textarea id="scenes" name="scenes" placeholder="Optional. Leave blank and the AI will generate scenes. Or paste rough beats like:&#10;1. Product name and value prop&#10;2. Three feature callouts&#10;3. Screenshot or UI motion&#10;4. Final URL or call to action"></textarea>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-title">Output</div>
+            <div class="row">
+              <div class="field">
+                <label for="duration">Duration</label>
+                <select id="duration" name="duration">
+                  <option value="5">5 seconds</option>
+                  <option value="8">8 seconds</option>
+                  <option value="10" selected>10 seconds</option>
+                  <option value="15">15 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="45">45 seconds</option>
+                  <option value="60">60 seconds</option>
+                  <option value="90">90 seconds</option>
+                  <option value="120">120 seconds</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="fps">FPS</label>
+                <select id="fps" name="fps">
+                  <option value="24">24 fps</option>
+                  <option value="30" selected>30 fps</option>
+                  <option value="48">48 fps</option>
+                  <option value="60">60 fps</option>
+                  <option value="90">90 fps</option>
+                  <option value="120">120 fps</option>
+                  <option value="144">144 fps</option>
+                </select>
+                <div class="hint">Cetus accepts positive FPS values. High FPS can be slow.</div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="size">Output Size</label>
+                <select id="size" name="size">
+                  <option value="1920x1080" selected>1920x1080 landscape</option>
+                  <option value="1080x1920">1080x1920 vertical</option>
+                  <option value="1080x1080">1080x1080 square</option>
+                  <option value="1280x720">1280x720 compact</option>
+                  <option value="3840x2160">3840x2160 4K landscape</option>
+                  <option value="custom">Custom from my instructions</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="format">Format</label>
+                <select id="format" name="format">
+                  <option value="mp4" selected>MP4</option>
+                  <option value="webm">WebM</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="htmlFile">HTML File Name</label>
+                <input id="htmlFile" name="htmlFile" type="text" value="cetus.html">
+              </div>
+              <div class="field">
+                <label for="outputFile">Video Output File</label>
+                <input id="outputFile" name="outputFile" type="text" value="out.mp4">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-title">Assets and Audio</div>
+            <div class="row">
+              <div class="field">
+                <label for="audio">Audio</label>
+                <select id="audio" name="audio">
+                  <option>No audio</option>
+                  <option>Use provided music file</option>
+                  <option>Use subtle background music placeholder</option>
+                  <option>Use voiceover timing placeholders</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="assets">Assets</label>
+                <input id="assets" name="assets" type="text" placeholder="logo.svg, dashboard.png, music.wav">
+              </div>
+            </div>
+            <div class="field">
+              <label for="notes">Extra Notes</label>
+              <textarea id="notes" name="notes" placeholder="Brand colors, fonts, words to avoid, mood, references, animation preferences, or accessibility requirements."></textarea>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button type="submit">Generate Prompt</button>
+            <button class="secondary" type="button" id="resetButton">Reset</button>
+            <a class="link-button secondary" href="/docs/">Open Docs</a>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel output">
+        <div class="output-head">
+          <div>
+            <h2>Generated Prompt</h2>
+            <div class="status" id="copyStatus"></div>
+          </div>
+          <button type="button" id="copyButton">Copy Prompt</button>
+        </div>
+        <textarea id="promptOutput" readonly spellcheck="false"></textarea>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2>How The Controls Map To Cetus</h2>
+        <div class="controls">
+          <article class="control">
+            <h3>FPS</h3>
+            <p><code>data-fps</code> sets the composition default. <code>--fps</code> overrides it at render time. Total frames are <code>duration * fps</code>.</p>
+          </article>
+          <article class="control">
+            <h3>Size</h3>
+            <p><code>data-width</code> and <code>data-height</code> define the HTML canvas. <code>--width</code> and <code>--height</code> override the output size.</p>
+          </article>
+          <article class="control">
+            <h3>Format</h3>
+            <p><code>.mp4</code> uses H.264 for broad compatibility. <code>.webm</code> uses VP9 and is useful for browser-native workflows.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2>Assistant Workflows</h2>
+        <div class="controls">
+          <article class="control">
+            <h3>Chatbot</h3>
+            <p>Generates a complete HTML code block plus save, preview, and render instructions. Best when the AI cannot edit your files.</p>
+          </article>
+          <article class="control">
+            <h3>Codex or Claude Code</h3>
+            <p>Asks the agent to create <code>cetus.html</code> directly, list changed files, and provide the exact Cetus commands.</p>
+          </article>
+          <article class="control">
+            <h3>Terminal Agent</h3>
+            <p>Requests a local file, safe command usage, validation when possible, and a final guide for changing FPS, duration, size, and format.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2>Template Ideas</h2>
+        <div class="templates">
+          <article class="template">
+            <h3>Website Launch</h3>
+            <p>Hero screenshot, product tagline, three feature callouts, final URL, 8 to 12 seconds.</p>
+          </article>
+          <article class="template">
+            <h3>Video Intro</h3>
+            <p>Logo reveal, title, subtitle, quick motion accent, clean fade out, 3 to 6 seconds.</p>
+          </article>
+          <article class="template">
+            <h3>Product Demo</h3>
+            <p>Interface panels, cursor path, feature labels, before/after result, 12 to 30 seconds.</p>
+          </article>
+          <article class="template">
+            <h3>Social Reel</h3>
+            <p>Vertical 1080x1920 layout, fast captions, visual beats, strong final call to action.</p>
+          </article>
+          <article class="template">
+            <h3>Explainer</h3>
+            <p>Problem statement, process steps, result screen, concise text, 20 to 45 seconds.</p>
+          </article>
+          <article class="template">
+            <h3>Brand System</h3>
+            <p>Reusable colors, type scale, lower thirds, title cards, and end screens for repeated videos.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2>Example Render Commands</h2>
+        <pre><code>cetus render cetus.html -o out.mp4
+cetus render cetus.html -o reel.mp4
+cetus render cetus.html -o transparent.webm
+
+# Override HTML defaults only when needed
+cetus render cetus.html -o smooth.mp4 --fps 60
+cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">AGPL-3.0-or-later. Built by Cenvero.</div>
+  </footer>
+
+  <script>
+    const form = document.getElementById("promptForm");
+    const output = document.getElementById("promptOutput");
+    const copyButton = document.getElementById("copyButton");
+    const copyStatus = document.getElementById("copyStatus");
+    const resetButton = document.getElementById("resetButton");
+    const formatSelect = document.getElementById("format");
+    const outputFileInput = document.getElementById("outputFile");
+
+    function value(id) {
+      return document.getElementById(id).value.trim();
+    }
+
+    function dimensions() {
+      const selected = value("size");
+      if (selected === "custom") {
+        return { width: "custom", height: "custom", label: "custom from my instructions" };
+      }
+      const parts = selected.split("x");
+      return { width: parts[0], height: parts[1], label: selected };
+    }
+
+    function outputName(format) {
+      return format === "webm" ? "out.webm" : "out.mp4";
+    }
+
+    function inferredFormat(fileName) {
+      const lower = fileName.toLowerCase();
+      if (lower.endsWith(".webm")) {
+        return "webm";
+      }
+      if (lower.endsWith(".mp4")) {
+        return "mp4";
+      }
+      return "";
+    }
+
+    function renderCommand(htmlFile, outputFile, format) {
+      const flag = inferredFormat(outputFile) === format ? "" : ` --format ${format}`;
+      return `cetus render ${htmlFile} -o ${outputFile}${flag}`;
+    }
+
+    function overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize) {
+      const flag = inferredFormat(outputFile) === format ? "" : ` --format ${format}`;
+      return `cetus render ${htmlFile} -o ${outputFile}${flag} --fps ${fps} ${commandSize}`;
+    }
+
+    function cleanFileName(name, fallback) {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return fallback;
+      }
+      return trimmed.replace(/[^\w./-]/g, "-");
+    }
+
+    function targetName(target) {
+      switch (target) {
+        case "codex":
+          return "Codex";
+        case "claude-code":
+          return "Claude Code";
+        case "terminal-agent":
+          return "Other terminal coding agent";
+        case "custom-agent":
+          return "Custom coding assistant";
+        default:
+          return "Generic chatbot";
+      }
+    }
+
+    function accessInstructions(access, source) {
+      switch (access) {
+        case "can-browse":
+          return `You may inspect links I provide if your environment allows browsing. Source material: ${source}. If browsing fails, ask me for screenshots, page copy, brand colors, and asset files.`;
+        case "local-only":
+          return "Do not browse the internet. Use only the information, screenshots, copied text, and local assets I provide.";
+        case "can-run":
+          return "You may run terminal commands if your environment allows it. Ask before installing tools or downloading assets.";
+        default:
+          return "Ask before browsing websites, running terminal commands, downloading assets, or making file changes.";
+      }
+    }
+
+    function targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand) {
+      const previewCommand = `cetus preview ${htmlFile}`;
+
+      if (target === "codex") {
+        return `You are working as Codex in a shared coding workspace.
+
+Do the work directly:
+- Create or update ${htmlFile} with the complete Cetus composition.
+- Keep the file self-contained unless I list local assets.
+- Do not create a Node.js, npm, Vite, React, or bundler project.
+- If Cetus is installed, run a quick validation command such as:
+  cetus version
+- If rendering is reasonable in this environment, run:
+  ${primaryCommand}
+- If rendering is not possible, explain exactly what command I should run.
+- Final response should include changed file paths, preview command, render command, optional override command, and any asset assumptions.
+
+Preview command:
+${previewCommand}
+
+Render command:
+${primaryCommand}
+
+Override command if I want to ignore HTML defaults:
+${overrideCommand}`;
+      }
+
+      if (target === "claude-code") {
+        return `You are working in Claude Code or a similar file-editing coding agent.
+
+Do the work directly:
+- Write the complete Cetus composition to ${htmlFile}.
+- Use normal file editing tools, not a partial snippet.
+- Keep it self-contained unless I provide local files.
+- Do not introduce Node.js, npm, React, Vite, or build tooling.
+- If commands are available, run or propose:
+  cetus version
+  ${previewCommand}
+  ${primaryCommand}
+- If you cannot run commands, still provide the exact commands and explain where to run them.
+- Final response should include the created file, how to preview, how to render, and how to adjust duration, FPS, size, and format.`;
+      }
+
+      if (target === "terminal-agent") {
+        return `You are a terminal-based coding agent.
+
+Create a usable local file:
+- Write the full HTML composition to ${htmlFile}.
+- Do not depend on Node.js, npm, React, Vite, or a build step.
+- Use local asset paths exactly as provided.
+- Run safe read/build commands when possible.
+- Do not use destructive shell commands.
+
+After creating the file, provide:
+- Preview command: ${previewCommand}
+- Render command: ${primaryCommand}
+- Override command: ${overrideCommand}
+- A short note explaining how to change FPS, duration, output dimensions, and format.`;
+      }
+
+      if (target === "custom-agent") {
+        return `You are a coding assistant that can either write files or return code.
+
+If you can edit files:
+- Create ${htmlFile} directly.
+- Provide the preview and render commands.
+
+If you cannot edit files:
+- Return the full contents of ${htmlFile} in one HTML code block.
+- Then provide the exact commands below.
+
+Preview command:
+${previewCommand}
+
+Render command:
+${primaryCommand}
+
+Override command:
+${overrideCommand}`;
+      }
+
+      return `You are a chatbot. Return a complete answer I can use manually.
+
+Do not assume you can write files.
+Return:
+1. A short concept.
+2. A scene timing plan.
+3. The complete contents of ${htmlFile} in one HTML code block.
+4. A short usage guide that tells me to save the code as ${htmlFile}.
+5. The exact preview and render commands.
+
+Preview command:
+${previewCommand}
+
+Render command:
+${primaryCommand}
+
+Override command if I want to ignore HTML defaults:
+${overrideCommand}`;
+    }
+
+    function sceneInstructions(mode, scenes, type, duration, pacing) {
+      const hasScenes = scenes.trim().length > 0;
+      if (mode === "exact") {
+        if (hasScenes) {
+          return `Use my scenes exactly as the required structure. You may improve timing and visual execution, but do not add, remove, or reorder scenes unless you ask first.`;
+        }
+        return `No scenes were provided, but the selected mode says to use exact scenes. Ask me for the scene list before writing the final HTML.`;
+      }
+      if (mode === "improve") {
+        if (hasScenes) {
+          return `Treat my scenes as a rough draft. Improve the structure, pacing, wording, timing, and transitions while preserving the core intent.`;
+        }
+        return `No scenes were provided. Generate a strong scene plan for a ${type} video with ${pacing.toLowerCase()} pacing and a ${duration} second runtime.`;
+      }
+      if (mode === "ask-if-missing") {
+        if (hasScenes) {
+          return `Use my provided scenes as the starting plan. Ask only if a required scene detail is missing.`;
+        }
+        return `Scenes are missing. Ask me whether I want you to generate the scenes or whether I want to provide them manually.`;
+      }
+      if (hasScenes) {
+        return `My scenes are optional guidance. You may replace, merge, reorder, or improve them if a better ${duration} second video structure is possible.`;
+      }
+      return `Generate the complete scene plan yourself. Use the video type, source material, style, pacing, duration, and output size to create a polished sequence. Do not block on missing scenes.`;
+    }
+
+    function generatePrompt() {
+      const source = value("sourceRef") || "No source material provided yet. Ask me for a website URL, app/product notes, screenshots, copy, brand details, script, or asset files if needed.";
+      const target = value("targetTool");
+      const access = value("agentAccess");
+      const instruction = value("instruction") || "Create a polished Cetus video composition from the information below.";
+      const type = value("videoType");
+      const style = value("style");
+      const sceneMode = value("sceneMode");
+      const pacing = value("pacing");
+      const duration = value("duration");
+      const fps = value("fps");
+      const size = dimensions();
+      const format = value("format");
+      const audio = value("audio");
+      const assets = value("assets") || "No assets listed yet. Ask me for logo, screenshots, product images, fonts, colors, and audio if needed.";
+      const notes = value("notes") || "No extra notes provided.";
+      const htmlFile = cleanFileName(value("htmlFile"), "cetus.html");
+      const defaultOutput = outputName(format);
+      const outputFile = cleanFileName(value("outputFile"), defaultOutput);
+      const rawScenes = value("scenes");
+      const scenes = rawScenes || "No scenes provided. Generate a scene plan if the selected scene mode allows it.";
+      const frameCount = Number(duration) * Number(fps);
+      const commandSize = size.width === "custom" ? "--width WIDTH --height HEIGHT" : `--width ${size.width} --height ${size.height}`;
+      const primaryCommand = renderCommand(htmlFile, outputFile, format);
+      const overrideCommand = overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize);
+
+      return `You are helping me build a video with Cetus.
+
+Cetus website: https://cetus.cenvero.org/
+Cetus docs: https://cetus.cenvero.org/docs/
+
+Cetus is a CLI that renders plain HTML compositions into MP4 or WebM. It uses data attributes for timing and renders deterministic frames in a browser.
+
+Target assistant:
+${targetName(target)}
+
+Environment and access:
+${accessInstructions(access, source)}
+
+My request:
+${instruction}
+
+Source material:
+${source}
+
+Video type:
+${type}
+
+Visual style:
+${style}
+
+Pacing:
+${pacing}
+
+Output controls:
+- Duration: ${duration} seconds
+- FPS: ${fps}
+- Expected frame count: ${frameCount} frames
+- Size: ${size.label}
+- Format: ${format.toUpperCase()}
+- Audio: ${audio}
+- HTML file: ${htmlFile}
+- Video output file: ${outputFile}
+
+Assets I can provide:
+${assets}
+
+Requested scenes:
+${scenes}
+
+Scene planning instruction:
+${sceneInstructions(sceneMode, rawScenes, type, duration, pacing)}
+
+Extra notes:
+${notes}
+
+Before writing code, ask me only for missing information that is truly required. Treat blank source, scenes, assets, and notes as optional unless the selected scene planning mode explicitly asks for more input. If enough information is present, make reasonable creative assumptions, list those assumptions briefly, and proceed.
+
+Create:
+1. A short video concept.
+2. A scene-by-scene timing plan with start time and duration for each scene.
+3. A complete single-file Cetus HTML composition named ${htmlFile}.
+4. A usage guide with preview, render, and optional override commands.
+5. Notes for changing duration, FPS, size, format, text, colors, and assets.
+
+Target-specific instructions:
+${targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand)}
+
+Cetus composition rules:
+- Use one root element with data-composition-id, data-width, data-height, data-duration, and data-fps.
+- Set data-duration to ${duration}.
+- Set data-fps to ${fps}.
+- Set data-width and data-height to ${size.label}.
+- Every timed visual element must use class="clip", data-start, data-duration, and data-track-index.
+- data-start and data-duration are in seconds.
+- Higher data-track-index means the element appears above lower tracks.
+- If media elements are used, include data-volume when relevant.
+- Use CSS for layout and animation when possible.
+- If GSAP is used, create paused timelines and push them into window.__timelines.
+- Do not require Node.js, npm, React, Vite, or a build step.
+- Prefer local asset paths for files I provide.
+- Make the composition readable and polished at the requested output size.
+- Keep text inside the frame and avoid overlapping UI elements.
+- Put the selected FPS, width, height, and duration in the HTML root attributes. Do not duplicate those values in the normal render command.
+
+FPS control:
+- Cetus renders time as frameNumber / fps.
+- ${duration} seconds at ${fps} fps means ${frameCount} captured frames.
+- 24 fps is lighter and cinematic.
+- 30 fps is the default choice for web and product videos.
+- 60 fps is smoother but takes longer to render.
+- 90, 120, and 144 fps are valid if the project needs very smooth motion, but they multiply render time and output work.
+- The HTML root should contain data-fps="${fps}", data-width, data-height, and data-duration="${duration}".
+- The normal render command should not repeat --fps, --width, or --height when the HTML already contains them.
+- The CLI can override HTML defaults with --fps, --width, and --height only when I intentionally want a different render.
+
+Render command:
+${primaryCommand}
+
+Optional override command:
+${overrideCommand}
+
+Preview command:
+cetus preview ${htmlFile}
+
+Installation command if Cetus is missing:
+curl -fsSL https://cetus.cenvero.org/install | sh
+
+If the source material is incomplete or a link cannot be accessed directly, ask me to paste screenshots, page copy, logo files, colors, product notes, brand notes, or the video script, then continue.`;
+    }
+
+    function updatePrompt() {
+      output.value = generatePrompt();
+      copyStatus.textContent = "";
+    }
+
+    form.addEventListener("submit", function(event) {
+      event.preventDefault();
+      updatePrompt();
+    });
+
+    form.addEventListener("input", updatePrompt);
+    form.addEventListener("change", updatePrompt);
+
+    formatSelect.addEventListener("change", function() {
+      if (outputFileInput.value === "out.mp4" || outputFileInput.value === "out.webm") {
+        outputFileInput.value = outputName(formatSelect.value);
+      }
+      updatePrompt();
+    });
+
+    resetButton.addEventListener("click", function() {
+      form.reset();
+      outputFileInput.value = outputName(formatSelect.value);
+      updatePrompt();
+    });
+
+    copyButton.addEventListener("click", async function() {
+      output.select();
+      try {
+        await navigator.clipboard.writeText(output.value);
+        copyStatus.textContent = "Prompt copied.";
+      } catch (_) {
+        document.execCommand("copy");
+        copyStatus.textContent = "Prompt selected.";
+      }
+    });
+
+    updatePrompt();
+  </script>
+</body>
+</html>

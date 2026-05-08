@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cetus Docs</title>
+  <meta name="description" content="Documentation for Cetus, the self-contained HTML to video renderer.">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #030508;
+      --panel: #0d1418;
+      --text: #edf7f5;
+      --muted: #99aaa6;
+      --line: #213139;
+      --accent: #00ebb8;
+      --accent-soft: rgba(0, 235, 184, 0.14);
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); letter-spacing: 0; }
+    a { color: inherit; }
+    .wrap { width: min(1060px, calc(100% - 32px)); margin: 0 auto; }
+    header { border-bottom: 1px solid var(--line); background: rgba(3, 5, 8, 0.92); position: sticky; top: 0; z-index: 5; }
+    nav { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .mark { width: 28px; height: 28px; border: 1px solid var(--accent); background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); font-family: var(--mono); font-size: 13px; }
+    .links { display: flex; gap: 18px; color: var(--muted); font-size: 14px; }
+    main { padding: 64px 0; }
+    .hero { max-width: 760px; margin-bottom: 48px; }
+    h1 { margin: 0; font-size: clamp(44px, 7vw, 76px); line-height: 0.98; letter-spacing: 0; }
+    .lead { color: var(--muted); font-size: 19px; line-height: 1.6; margin: 20px 0 0; }
+    .grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 32px; align-items: start; }
+    aside { position: sticky; top: 88px; border: 1px solid var(--line); background: var(--panel); padding: 16px; border-radius: 8px; }
+    aside a { display: block; color: var(--muted); text-decoration: none; padding: 8px 0; font-size: 14px; }
+    section { border-top: 1px solid var(--line); padding: 32px 0; }
+    h2 { margin: 0 0 14px; font-size: 28px; letter-spacing: 0; }
+    h3 { margin: 24px 0 10px; font-size: 18px; }
+    p, li { color: var(--muted); line-height: 1.62; }
+    ul { padding-left: 20px; }
+    code, pre { font-family: var(--mono); }
+    code { color: var(--accent); }
+    pre { margin: 16px 0 0; padding: 18px; overflow: auto; border: 1px solid var(--line); background: #05090c; color: #d6e9e5; font-size: 13px; line-height: 1.55; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+    th { color: var(--text); background: var(--panel); }
+    td { color: var(--muted); }
+    footer { color: var(--muted); border-top: 1px solid var(--line); padding: 28px 0; font-size: 14px; }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      aside { position: static; }
+      .links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="wrap">
+      <a class="brand" href="/"><span class="mark">C</span> Cetus</a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/build-with-ai/">Build with AI</a>
+        <a href="https://github.com/cenvero/cetus">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <h1>Docs</h1>
+      <p class="lead">Cetus renders a plain HTML composition into video by seeking browser state for every frame and piping captured PNG frames into bundled ffmpeg.</p>
+    </div>
+
+    <div class="grid">
+      <aside>
+        <a href="#install">Install</a>
+        <a href="#commands">Commands</a>
+        <a href="#output-controls">Output Controls</a>
+        <a href="#composition">Composition HTML</a>
+        <a href="#clips">Clips</a>
+        <a href="#animation">Animation</a>
+        <a href="#rendering">Rendering Model</a>
+        <a href="#preview">Preview</a>
+      </aside>
+
+      <div>
+        <section id="install">
+          <h2>Install</h2>
+          <pre><code>curl -fsSL https://cetus.cenvero.org/install | sh</code></pre>
+          <p>Cetus ships as one binary per platform. After install it does not need Node.js, npm, system Chrome, or system ffmpeg.</p>
+        </section>
+
+        <section id="commands">
+          <h2>Commands</h2>
+          <pre><code>cetus render cetus.html -o out.mp4
+cetus render cetus.html -o out.webm
+cetus preview cetus.html
+cetus version</code></pre>
+          <p><code>cetus.html</code> is the recommended default filename. Cetus accepts any HTML file path.</p>
+          <table>
+            <tr><th>Flag</th><th>Use</th></tr>
+            <tr><td><code>-o, --output</code></td><td>Required output path.</td></tr>
+            <tr><td><code>--fps</code></td><td>Frames per second. Defaults to the HTML value or 30.</td></tr>
+            <tr><td><code>--width</code>, <code>--height</code></td><td>Override composition dimensions.</td></tr>
+            <tr><td><code>--format</code></td><td><code>mp4</code> or <code>webm</code>. Defaults from output extension.</td></tr>
+            <tr><td><code>--no-gpu</code></td><td>Disable GPU acceleration for CI, Docker, or headless Linux servers.</td></tr>
+          </table>
+        </section>
+
+        <section id="output-controls">
+          <h2>Output Controls</h2>
+          <p>The HTML composition should normally be the source of truth for render settings. Use CLI flags only when you intentionally want to override the HTML defaults for one render.</p>
+          <h3>FPS</h3>
+          <p>Set the frame rate in HTML with <code>data-fps</code>. Override it at render time with <code>--fps</code> only when you want a different output than the composition declares.</p>
+          <pre><code>&lt;div id="root"
+     data-composition-id="intro"
+     data-width="1920"
+     data-height="1080"
+     data-duration="10"
+     data-fps="30"&gt;&lt;/div&gt;
+
+cetus render cetus.html -o out.mp4 --fps 60</code></pre>
+          <table>
+            <tr><th>FPS</th><th>Best For</th><th>Tradeoff</th></tr>
+            <tr><td><code>24</code></td><td>Cinematic motion and lighter renders.</td><td>Less smooth for UI motion.</td></tr>
+            <tr><td><code>30</code></td><td>Default web, product, launch, and social videos.</td><td>Balanced render time and smoothness.</td></tr>
+            <tr><td><code>60</code></td><td>Very smooth UI motion and fast transitions.</td><td>Twice as many frames as 30 fps.</td></tr>
+            <tr><td><code>90+</code></td><td>Special high-motion or high-refresh use cases.</td><td>Large frame counts and longer render times.</td></tr>
+          </table>
+          <p>Total captured frames are calculated as <code>duration * fps</code>. A 10 second video at 30 fps renders 300 frames. The same video at 60 fps renders 600 frames. Cetus accepts positive FPS values, so 90, 120, and 144 fps are possible when the extra render cost is acceptable.</p>
+
+          <h3>Size</h3>
+          <p>Use <code>data-width</code> and <code>data-height</code> in HTML for the composition canvas. Use <code>--width</code> and <code>--height</code> only for one-off override renders.</p>
+          <pre><code>cetus render cetus.html -o landscape.mp4 --width 1920 --height 1080
+cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920
+cetus render cetus.html -o square.mp4 --width 1080 --height 1080</code></pre>
+
+          <h3>Format</h3>
+          <p>Cetus infers the format from the output extension unless <code>--format</code> is provided.</p>
+          <pre><code>cetus render cetus.html -o out.mp4
+cetus render cetus.html -o out.webm
+cetus render cetus.html -o out.video --format mp4</code></pre>
+
+          <h3>Timeout and GPU</h3>
+          <p><code>--timeout</code> sets the maximum render time in seconds. GPU stays enabled by default for WebGL, Three.js, and shader animations. Use <code>--no-gpu</code> on CI, Docker, or headless Linux servers where GPU drivers are not available.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --timeout 600
+cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
+        </section>
+
+        <section id="composition">
+          <h2>Composition HTML</h2>
+          <p>The root element declares the canvas, duration, and identity of the video.</p>
+          <pre><code>&lt;div id="root"
+     data-composition-id="intro"
+     data-width="1920"
+     data-height="1080"
+     data-duration="5"
+     data-fps="30"&gt;
+  &lt;h1 class="clip"
+      data-start="0.5"
+      data-duration="4"
+      data-track-index="0"&gt;
+    Hello World
+  &lt;/h1&gt;
+&lt;/div&gt;</code></pre>
+          <table>
+            <tr><th>Attribute</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>data-composition-id</code></td><td>Yes</td><td>Unique composition ID.</td></tr>
+            <tr><td><code>data-width</code></td><td>Yes</td><td>Output width in pixels.</td></tr>
+            <tr><td><code>data-height</code></td><td>Yes</td><td>Output height in pixels.</td></tr>
+            <tr><td><code>data-duration</code></td><td>Yes</td><td>Total duration in seconds.</td></tr>
+            <tr><td><code>data-fps</code></td><td>No</td><td>Default frame rate.</td></tr>
+          </table>
+        </section>
+
+        <section id="clips">
+          <h2>Clips</h2>
+          <p>Any element with <code>class="clip"</code> appears only during its configured time range.</p>
+          <pre><code>&lt;video class="clip"
+       data-start="0"
+       data-duration="10"
+       data-track-index="1"
+       data-volume="0.4"
+       src="bg.mp4"
+       muted playsinline&gt;&lt;/video&gt;</code></pre>
+          <ul>
+            <li><code>data-start</code> is the clip start time in seconds.</li>
+            <li><code>data-duration</code> is how long the clip stays active.</li>
+            <li><code>data-track-index</code> maps to z-index layering.</li>
+            <li><code>data-volume</code> controls audio/video volume from 0.0 to 1.0.</li>
+          </ul>
+        </section>
+
+        <section id="animation">
+          <h2>Animation</h2>
+          <p>CSS animations, WebGL, Three.js, GSAP, video, audio, and normal browser APIs can run inside a composition. GSAP timelines should be paused and registered on <code>window.__timelines</code>.</p>
+          <pre><code>&lt;script&gt;
+  window.__timelines = window.__timelines || [];
+  const tl = gsap.timeline({ paused: true });
+  tl.from("#title", { opacity: 0, y: 40, duration: 0.8 });
+  window.__timelines.push(tl);
+&lt;/script&gt;</code></pre>
+        </section>
+
+        <section id="rendering">
+          <h2>Rendering Model</h2>
+          <p>For each frame, Cetus calculates <code>time = frame / fps</code>, writes that time to <code>document.__cetusTime</code>, seeks timelines, seeks media elements, updates clip visibility, then captures one deterministic browser frame through Chrome DevTools.</p>
+          <pre><code>cetus.html
+  -> parse data attributes
+  -> launch embedded headless browser
+  -> seek frame state
+  -> capture PNG frame
+  -> pipe frames to embedded ffmpeg
+  -> write MP4 or WebM</code></pre>
+        </section>
+
+        <section id="preview">
+          <h2>Preview</h2>
+          <p>The preview command serves the composition locally and injects a tiny live-reload client at runtime. It does not modify your source HTML.</p>
+          <pre><code>cetus preview cetus.html
+cetus preview cetus.html --port 8080
+cetus preview cetus.html --no-open</code></pre>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">AGPL-3.0-or-later. Built by Cenvero.</div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+BASE_URL="${CETUS_BASE_URL:-https://cetus.cenvero.org}"
+
+if command -v pwsh >/dev/null 2>&1 && [ "${OS:-}" = "Windows_NT" ]; then
+  exec pwsh -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb ${BASE_URL}/install.ps1 | iex"
+fi
+
+curl -fsSL "${BASE_URL}/install.sh" | sh
+

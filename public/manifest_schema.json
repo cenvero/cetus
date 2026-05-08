@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "generated_at",
+    "channels",
+    "binaries"
+  ],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "channels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "version",
+          "release_date",
+          "min_supported",
+          "release_notes_url",
+          "history"
+        ],
+        "properties": {
+          "version": { "type": "string" },
+          "release_date": { "type": "string", "format": "date-time" },
+          "min_supported": { "type": "string" },
+          "release_notes_url": { "type": "string", "format": "uri" },
+          "history": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "binaries": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "required": [
+            "url",
+            "sha256",
+            "signature_url",
+            "size"
+          ],
+          "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "sha256": { "type": "string" },
+            "signature_url": { "type": "string", "format": "uri" },
+            "size": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  }
+}
+

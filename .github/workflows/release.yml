@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Install asset tools
+        run: sudo apt-get update && sudo apt-get install -y brotli unzip xz-utils minisign
+      - name: Validate release environment
+        run: ./scripts/validate-release-env.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+      - name: Write minisign key
+        run: |
+          install -m 0700 -d "$RUNNER_TEMP/minisign"
+          printf '%s\n' "$MINISIGN_PRIVATE_KEY" > "$RUNNER_TEMP/minisign/minisign.key"
+          chmod 0600 "$RUNNER_TEMP/minisign/minisign.key"
+          echo "MINISIGN_KEY_FILE=$RUNNER_TEMP/minisign/minisign.key" >> "$GITHUB_ENV"
+        env:
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+      - name: Prepare all embedded assets
+        run: |
+          ./scripts/prep-assets.sh linux amd64
+          ./scripts/prep-assets.sh linux arm64
+          ./scripts/prep-assets.sh darwin amd64
+          ./scripts/prep-assets.sh darwin arm64
+          ./scripts/prep-assets.sh windows amd64
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+
+  update-manifest:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${GITHUB_REF_NAME}" -D dist
+      - run: ./scripts/update-manifest.sh "${GITHUB_REF_NAME}" dist
+      - name: Commit manifest
+        run: |
+          git config user.name cenvero-bot
+          git config user.email 276044322+cenvero-bot@users.noreply.github.com
+          git add public/manifest.json
+          git commit -m "Update Cetus release manifest for ${GITHUB_REF_NAME}" || exit 0
+          git push origin HEAD:main
+
+  smoke-test:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Download linux archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${GITHUB_REF_NAME}" \
+            -p "cetus_${GITHUB_REF_NAME}_linux_amd64.tar.gz" \
+            -p "cetus_${GITHUB_REF_NAME}_linux_amd64.tar.gz.minisig"
+      - run: minisign -Vm "cetus_${GITHUB_REF_NAME}_linux_amd64.tar.gz" -p public/signing.pub
+      - run: tar -xzf "cetus_${GITHUB_REF_NAME}_linux_amd64.tar.gz"
+      - run: ./cetus version
+
+  deploy-pages:
+    needs:
+      - update-manifest
+      - smoke-test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4

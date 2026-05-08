@@ -1,0 +1,76 @@
+version: 2
+project_name: cetus
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cetus
+    main: ./cmd/cetus
+    binary: cetus
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/cenvero/cetus/internal/version.Version={{.Version}} -X github.com/cenvero/cetus/internal/version.Commit={{.Commit}} -X github.com/cenvero/cetus/internal/version.Date={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: cetus-archive
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "cetus_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+signs:
+  - artifacts: archive
+    cmd: minisign
+    signature: "${artifact}.minisig"
+    stdin: "{{ .Env.MINISIGN_PASSWORD }}"
+    args:
+      - -Sm
+      - "${artifact}"
+      - -s
+      - "{{ .Env.MINISIGN_KEY_FILE }}"
+      - -x
+      - "${signature}"
+
+brews:
+  - name: cenvero-cetus
+    repository:
+      owner: cenvero
+      name: homebrew-cetus
+      token: "{{ .Env.HOMEBREW_TOKEN }}"
+    homepage: "https://cetus.cenvero.org"
+    description: "HTML to video renderer - self-contained, deterministic, fast"
+    license: "AGPL-3.0-or-later"
+    directory: Formula
+    skip_upload: auto
+    commit_author:
+      name: cenvero-bot
+      email: 276044322+cenvero-bot@users.noreply.github.com
+    install: |
+      bin.install "cetus"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/cetus version")
+
+release:
+  draft: false
+  prerelease: auto

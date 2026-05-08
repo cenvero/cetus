@@ -1,0 +1,12 @@
+dist/
+/cetus
+coverage.out
+*.test
+*.br
+.DS_Store
+internal/assets/*/*.tmp
+
+# Local maintainer notes
+/RELEASING.md
+/LAUNCH.md
+/launch.md

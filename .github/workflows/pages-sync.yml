@@ -1,0 +1,42 @@
+name: Pages Sync
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check manifest freshness
+        id: freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest="$(gh release view --json tagName -q .tagName || true)"
+          live="$(curl -fsSL https://cetus.cenvero.org/manifest.json | jq -r '.channels.stable.version' || true)"
+          if [ -n "$latest" ] && [ "$latest" != "$live" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/configure-pages@v5
+        if: steps.freshness.outputs.deploy == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.freshness.outputs.deploy == 'true'
+        with:
+          path: public
+      - id: deployment
+        if: steps.freshness.outputs.deploy == 'true'
+        uses: actions/deploy-pages@v4
+
