@@ -34,6 +34,10 @@ need() {
 need curl
 need unzip
 
+log() {
+  printf '[prep-assets %s/%s] %s\n' "${GOOS_TARGET}" "${GOARCH_TARGET}" "$*"
+}
+
 if ! command -v brotli >/dev/null 2>&1; then
   echo "missing required command: brotli" >&2
   exit 1
@@ -108,8 +112,9 @@ CHROME_PLATFORM="$(chrome_platform)"
 CHROME_ZIP="${WORK_DIR}/chrome-headless-shell.zip"
 CHROME_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${CHROME_PLATFORM}/chrome-headless-shell-${CHROME_PLATFORM}.zip"
 
-echo "downloading chrome-headless-shell ${CHROME_VERSION} for ${CHROME_PLATFORM}"
+log "downloading chrome-headless-shell ${CHROME_VERSION} for ${CHROME_PLATFORM}"
 download "${CHROME_URL}" "${CHROME_ZIP}"
+log "extracting chrome archive"
 unzip -q "${CHROME_ZIP}" -d "${WORK_DIR}/chrome"
 
 if [[ "${GOOS_TARGET}" == "windows" ]]; then
@@ -121,30 +126,37 @@ if [[ -z "${CHROME_BIN}" ]]; then
   echo "chrome-headless-shell binary not found in archive" >&2
   exit 1
 fi
+log "compressing embedded browser with brotli -q 11"
 brotli -f -q 11 "${CHROME_BIN}" -o "${PLATFORM_DIR}/headless-shell.br"
+log "embedded browser ready"
 
 FFMPEG_URL="$(ffmpeg_url)"
 FFMPEG_SHA256="$(ffmpeg_sha256)"
 FFMPEG_ARCHIVE="${WORK_DIR}/ffmpeg.archive"
-echo "downloading ffmpeg for ${GOOS_TARGET}/${GOARCH_TARGET}"
+log "downloading ffmpeg"
 download "${FFMPEG_URL}" "${FFMPEG_ARCHIVE}"
+log "verifying ffmpeg checksum"
 verify_sha256 "${FFMPEG_ARCHIVE}" "${FFMPEG_SHA256}"
 mkdir -p "${WORK_DIR}/ffmpeg"
 
 case "${GOOS_TARGET}" in
   linux)
+    log "extracting ffmpeg archive"
     tar -xJf "${FFMPEG_ARCHIVE}" -C "${WORK_DIR}/ffmpeg"
     FFMPEG_BIN="$(find "${WORK_DIR}/ffmpeg" -type f -name ffmpeg | head -n 1)"
     if [[ -z "${FFMPEG_BIN}" ]]; then
       echo "ffmpeg binary not found in archive" >&2
       exit 1
     fi
+    log "compressing embedded ffmpeg with brotli -q 11"
     brotli -f -q 11 "${FFMPEG_BIN}" -o "${PLATFORM_DIR}/ffmpeg.br"
     ;;
   darwin)
     if [[ "${GOARCH_TARGET}" == "arm64" ]]; then
+      log "copying ffmpeg binary"
       cp "${FFMPEG_ARCHIVE}" "${WORK_DIR}/ffmpeg/ffmpeg"
     else
+      log "extracting ffmpeg archive"
       unzip -q "${FFMPEG_ARCHIVE}" -d "${WORK_DIR}/ffmpeg"
     fi
     FFMPEG_BIN="$(find "${WORK_DIR}/ffmpeg" -type f -name ffmpeg | head -n 1)"
@@ -152,17 +164,20 @@ case "${GOOS_TARGET}" in
       echo "ffmpeg binary not found in archive" >&2
       exit 1
     fi
+    log "compressing embedded ffmpeg with brotli -q 11"
     brotli -f -q 11 "${FFMPEG_BIN}" -o "${PLATFORM_DIR}/ffmpeg.br"
     ;;
   windows)
+    log "extracting ffmpeg archive"
     unzip -q "${FFMPEG_ARCHIVE}" -d "${WORK_DIR}/ffmpeg"
     FFMPEG_BIN="$(find "${WORK_DIR}/ffmpeg" -type f -name ffmpeg.exe | head -n 1)"
     if [[ -z "${FFMPEG_BIN}" ]]; then
       echo "ffmpeg.exe binary not found in archive" >&2
       exit 1
     fi
+    log "compressing embedded ffmpeg with brotli -q 11"
     brotli -f -q 11 "${FFMPEG_BIN}" -o "${PLATFORM_DIR}/ffmpeg.exe.br"
     ;;
 esac
 
-echo "prepared embedded assets in ${PLATFORM_DIR}"
+log "prepared embedded assets in ${PLATFORM_DIR}"
