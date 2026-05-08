@@ -9,4 +9,3 @@ var headlessShellData []byte
 
 //go:embed windows-amd64/ffmpeg.exe.br
 var ffmpegData []byte
-

@@ -39,7 +39,6 @@ jobs:
       - name: Prepare all embedded assets
         run: |
           ./scripts/prep-assets.sh linux amd64
-          ./scripts/prep-assets.sh linux arm64
           ./scripts/prep-assets.sh darwin amd64
           ./scripts/prep-assets.sh darwin arm64
           ./scripts/prep-assets.sh windows amd64
@@ -103,6 +102,8 @@ jobs:
         with:
           ref: main
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public

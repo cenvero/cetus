@@ -9,4 +9,3 @@ var headlessShellData []byte
 
 //go:embed darwin-amd64/ffmpeg.br
 var ffmpegData []byte
-

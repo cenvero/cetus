@@ -21,6 +21,8 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+      - goos: linux
+        goarch: arm64
     ldflags:
       - -s -w -X github.com/cenvero/cetus/internal/version.Version={{.Version}} -X github.com/cenvero/cetus/internal/version.Commit={{.Commit}} -X github.com/cenvero/cetus/internal/version.Date={{.Date}}
     flags:

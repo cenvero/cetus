@@ -36,7 +36,7 @@ fi
 chrome_platform() {
   case "$GOOS_TARGET/$GOARCH_TARGET" in
     linux/amd64) echo "linux64" ;;
-    linux/arm64) echo "linux-arm64" ;;
+    linux/arm64) echo "unsupported target: linux/arm64; Chrome for Testing does not publish chrome-headless-shell for this target" >&2; exit 1 ;;
     darwin/amd64) echo "mac-x64" ;;
     darwin/arm64) echo "mac-arm64" ;;
     windows/amd64) echo "win64" ;;
@@ -47,7 +47,7 @@ chrome_platform() {
 ffmpeg_url() {
   case "$GOOS_TARGET/$GOARCH_TARGET" in
     linux/amd64) echo "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" ;;
-    linux/arm64) echo "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz" ;;
+    linux/arm64) echo "unsupported target: linux/arm64; Chrome for Testing does not publish chrome-headless-shell for this target" >&2; exit 1 ;;
     darwin/amd64) echo "https://evermeet.cx/ffmpeg/getrelease/zip" ;;
     darwin/arm64) echo "https://www.osxexperts.net/ffmpeg71arm.zip" ;;
     windows/amd64) echo "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" ;;
