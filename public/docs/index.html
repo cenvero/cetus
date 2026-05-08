@@ -82,6 +82,7 @@
         <a href="#animation">Animation</a>
         <a href="#rendering">Rendering Model</a>
         <a href="#preview">Preview</a>
+        <a href="#updates">Updates</a>
       </aside>
 
       <div>
@@ -96,6 +97,8 @@
           <pre><code>cetus render cetus.html -o out.mp4
 cetus render cetus.html -o out.webm
 cetus preview cetus.html
+cetus update check
+cetus update apply
 cetus version</code></pre>
           <p><code>cetus.html</code> is the recommended default filename. Cetus accepts any HTML file path.</p>
           <table>
@@ -221,6 +224,16 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
           <pre><code>cetus preview cetus.html
 cetus preview cetus.html --port 8080
 cetus preview cetus.html --no-open</code></pre>
+        </section>
+
+        <section id="updates">
+          <h2>Updates</h2>
+          <p>For direct binary installs, Cetus can check the release manifest and apply the latest stable release.</p>
+          <pre><code>cetus update check
+cetus update apply</code></pre>
+          <p>The updater downloads the archive for your platform, verifies its SHA-256 from the manifest, extracts the <code>cetus</code> binary, and replaces the current executable.</p>
+          <p>If Cetus is managed by Homebrew, self-update is disabled and Cetus prints the Homebrew command instead.</p>
+          <pre><code>brew update && brew upgrade cenvero-cetus</code></pre>
         </section>
       </div>
     </div>

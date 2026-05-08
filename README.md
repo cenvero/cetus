@@ -20,10 +20,18 @@ cetus render cetus.html -o out.webm
 # Override HTML defaults only when needed
 cetus render cetus.html -o out.mp4 --fps 60
 cetus preview cetus.html
+cetus update check
+cetus update apply
 cetus version
 ```
 
 `cetus.html` is the recommended default filename. Any HTML path works.
+
+If Cetus is installed with Homebrew, updates are handled by Homebrew:
+
+```sh
+brew update && brew upgrade cenvero-cetus
+```
 
 `--no-gpu` disables GPU acceleration. GPU remains enabled by default so WebGL,
 Three.js, and shader-based compositions work on platforms with usable graphics

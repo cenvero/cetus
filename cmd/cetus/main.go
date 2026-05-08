@@ -11,6 +11,7 @@ import (
 	"github.com/cenvero/cetus/internal/compose"
 	"github.com/cenvero/cetus/internal/encoder"
 	"github.com/cenvero/cetus/internal/preview"
+	"github.com/cenvero/cetus/internal/updater"
 	"github.com/cenvero/cetus/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -31,6 +32,7 @@ func newRootCommand() *cobra.Command {
 	}
 	root.AddCommand(newRenderCommand())
 	root.AddCommand(newPreviewCommand())
+	root.AddCommand(newUpdateCommand())
 	root.AddCommand(newVersionCommand())
 	return root
 }
@@ -154,6 +156,102 @@ func newPreviewCommand() *cobra.Command {
 
 	cmd.Flags().IntVar(&port, "port", 0, "port to listen on")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser automatically")
+	return cmd
+}
+
+func newUpdateCommand() *cobra.Command {
+	var manifestURL string
+
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Check for and apply Cetus updates",
+	}
+
+	cmd.PersistentFlags().StringVar(&manifestURL, "manifest-url", updater.DefaultManifestURL, "release manifest URL")
+	cmd.AddCommand(newUpdateCheckCommand(&manifestURL))
+	cmd.AddCommand(newUpdateApplyCommand(&manifestURL))
+	return cmd
+}
+
+func newUpdateCheckCommand(manifestURL *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "check",
+		Short: "Check whether a Cetus update is available",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if homebrew, path := updater.IsHomebrewManaged(); homebrew {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cetus is managed by Homebrew")
+				if path != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), " at %s", path)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), ".")
+				fmt.Fprintln(cmd.OutOrStdout(), "Use: brew update && brew upgrade cenvero-cetus")
+				return nil
+			}
+
+			result, err := updater.Check(cmd.Context(), version.Version, *manifestURL)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Current: %s\n", result.CurrentVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "Latest:  %s\n", result.LatestVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "Platform: %s\n", result.Platform)
+			if result.ReleaseNotesURL != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Release notes: %s\n", result.ReleaseNotesURL)
+			}
+			if result.UpdateAvailable {
+				if result.CurrentComparable {
+					fmt.Fprintln(cmd.OutOrStdout(), "Update available. Use: cetus update apply")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), "Latest release is available. Current version is not a release version.")
+				}
+				return nil
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Cetus is up to date.")
+			return nil
+		},
+	}
+}
+
+func newUpdateApplyCommand(manifestURL *string) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Download and install the latest Cetus release",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if homebrew, path := updater.IsHomebrewManaged(); homebrew {
+				fmt.Fprintf(cmd.OutOrStdout(), "Cetus is managed by Homebrew")
+				if path != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), " at %s", path)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), ".")
+				fmt.Fprintln(cmd.OutOrStdout(), "Use: brew update && brew upgrade cenvero-cetus")
+				return nil
+			}
+
+			result, err := updater.Apply(cmd.Context(), version.Version, *manifestURL, force)
+			if err != nil {
+				return err
+			}
+			if !result.Applied {
+				if result.Check != nil && !result.Check.UpdateAvailable {
+					fmt.Fprintln(cmd.OutOrStdout(), "Cetus is already up to date.")
+					return nil
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "No update applied.")
+				return nil
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Updated Cetus from %s to %s.\n", result.Check.CurrentVersion, result.Check.LatestVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "Installed: %s\n", result.InstalledPath)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&force, "force", false, "apply the latest release even if the current version is already current")
 	return cmd
 }
 
