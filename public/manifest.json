@@ -1,12 +1,13 @@
 {
-  "generated_at": "2026-05-08T20:40:33Z",
+  "generated_at": "2026-05-09T10:34:06Z",
   "channels": {
     "stable": {
-      "version": "v0.4.0",
-      "release_date": "2026-05-08T20:40:33Z",
+      "version": "v0.5.0",
+      "release_date": "2026-05-09T10:34:06Z",
       "min_supported": "v0.1.0",
-      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.4.0",
+      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.5.0",
       "history": [
+        "v0.5.0",
         "v0.4.0",
         "v0.3.0",
         "v0.2.0",
@@ -92,6 +93,32 @@
         "sha256": "2947518c47adb1b3a263d9c64dc858069ce15c530ab112627d94fcaa92d0c307",
         "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.4.0/cetus_v0.4.0_linux_amd64.tar.gz.minisig",
         "size": 126421215
+      }
+    },
+    "v0.5.0": {
+      "darwin-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_darwin_amd64.tar.gz",
+        "sha256": "43ca0fd389f878b56049a9d90dffb87f9acf5fccfc381b62b76a1d6753769a05",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_darwin_amd64.tar.gz.minisig",
+        "size": 86535274
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_darwin_arm64.tar.gz",
+        "sha256": "9d9fdca80fdbacadf728ac75f49b9f40894e21f04c9ce9fc051e99e15fdbfcc9",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_darwin_arm64.tar.gz.minisig",
+        "size": 76320292
+      },
+      "linux-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_linux_amd64.tar.gz",
+        "sha256": "96004692d6918c57328d05a1d692354d2fa7aa0f222ca3883449aef48505f978",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_linux_amd64.tar.gz.minisig",
+        "size": 126467047
+      },
+      "windows-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_windows_amd64.zip",
+        "sha256": "4d2fa798d8f9fe805a62ab620202e8d0b11d4fd1b533e6796bfb1ed345377824",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_windows_amd64.zip.minisig",
+        "size": 109161966
       }
     }
   }
