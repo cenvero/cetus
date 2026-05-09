@@ -78,6 +78,9 @@ func newRenderCommand() *cobra.Command {
 			if resume && framesDir == "" {
 				framesDir = ".cetus-frames"
 			}
+			if framesDir == "" && cmd.Flags().Changed("concurrency") && concurrency > 1 {
+				return fmt.Errorf("parallel frame capture requires --frames-dir or --resume")
+			}
 
 			input := args[0]
 			if _, err := os.Stat(input); err != nil {
@@ -143,8 +146,7 @@ func newRenderCommand() *cobra.Command {
 			ctx, cancel := renderContext(cmd.Context(), timeoutSeconds)
 			defer cancel()
 
-			progress.Stage("Starting %s encoder...", resolvedFormat)
-			enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat, encoder.Options{
+			encoderOpts := encoder.Options{
 				AudioPath:           audioPath,
 				AudioVolume:         audioVolume,
 				AudioVolumeSet:      cmd.Flags().Changed("audio-volume"),
@@ -153,16 +155,59 @@ func newRenderCommand() *cobra.Command {
 				AudioFadeInSeconds:  audioFadeInSeconds,
 				AudioFadeOutSeconds: audioFadeOutSeconds,
 				DurationSeconds:     renderDuration,
-			})
+			}
+			browserOpts := browser.Options{
+				ChromePath: chromePath,
+				NoGPU:      noGPU,
+			}
+
+			if framesDir != "" {
+				if resume {
+					progress.Stage("Using resumable frame cache at %s with %d worker(s)...", framesDir, concurrency)
+				} else {
+					progress.Stage("Saving rendered frames to %s with %d worker(s)...", framesDir, concurrency)
+				}
+				progress.ResetFrames()
+				if err := browser.CaptureFramesToCache(ctx, composition, browser.WorkerOptions{
+					HTMLPath:       input,
+					BrowserOptions: browserOpts,
+					CaptureOptions: browser.CaptureOptions{
+						FramesDir: framesDir,
+						Resume:    resume,
+					},
+					Workers: concurrency,
+				}, progress.Frames); err != nil {
+					return err
+				}
+
+				progress.Stage("Starting %s encoder...", resolvedFormat)
+				enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat, encoderOpts)
+				if err != nil {
+					return err
+				}
+				progress.Stage("Encoding cached frames...")
+				progress.ResetFrames()
+				if err := browser.EncodeCachedFrames(composition, enc, framesDir, progress.Frames); err != nil {
+					_ = enc.Close()
+					return err
+				}
+				progress.Stage("Finalizing %s output...", resolvedFormat)
+				if err := enc.Close(); err != nil {
+					return err
+				}
+
+				fmt.Fprintf(cmd.OutOrStdout(), "Rendered %s (%d frames, %s) in %s\n", output, composition.TotalFrames, resolvedFormat, time.Since(start).Round(time.Millisecond))
+				return nil
+			}
+
+			progress.Stage("Starting %s encoder...", resolvedFormat)
+			enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat, encoderOpts)
 			if err != nil {
 				return err
 			}
 
 			progress.Stage("Opening headless browser...")
-			b, err := browser.New(ctx, input, composition, browser.Options{
-				ChromePath: chromePath,
-				NoGPU:      noGPU,
-			})
+			b, err := browser.New(ctx, input, composition, browserOpts)
 			if err != nil {
 				_ = enc.Close()
 				return err
@@ -170,13 +215,7 @@ func newRenderCommand() *cobra.Command {
 			defer b.Close()
 
 			progress.Stage("Starting frame rendering...")
-			if framesDir != "" {
-				if resume {
-					progress.Stage("Using resumable frame cache at %s...", framesDir)
-				} else {
-					progress.Stage("Saving rendered frames to %s...", framesDir)
-				}
-			}
+			progress.ResetFrames()
 			if err := b.CaptureWithOptions(ctx, composition, enc, progress.Frames, browser.CaptureOptions{
 				FramesDir: framesDir,
 				Resume:    resume,
@@ -199,7 +238,7 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().IntVar(&width, "width", 0, "output width in pixels")
 	cmd.Flags().IntVar(&height, "height", 0, "output height in pixels")
 	cmd.Flags().StringVar(&format, "format", "", "output format: mp4 or webm")
-	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "number of parallel frame capture workers")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 1, "parallel frame capture workers when --frames-dir or --resume is used")
 	cmd.Flags().IntVar(&timeoutSeconds, "timeout", 0, "max render time in seconds; 0 disables the total render deadline")
 	cmd.Flags().StringVar(&audioPath, "audio", "", "audio file to mux into the output")
 	cmd.Flags().Float64Var(&audioVolume, "audio-volume", 1, "audio volume from 0.0 to 1.0")

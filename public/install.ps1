@@ -17,8 +17,8 @@ try {
   $Version = $ChannelInfo.version
   if (-not $Version) { throw "no $Channel Cetus release is published yet" }
 
-  $Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "X64") { "amd64" } else { throw "unsupported architecture" }
-  $Platform = "windows-$Arch"
+  if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne "X64") { throw "unsupported architecture: only windows-amd64 is supported" }
+  $Platform = "windows-amd64"
   $Binary = $Manifest.binaries.$Version.$Platform
   if (-not $Binary) { throw "manifest does not contain a binary for $Platform" }
 
@@ -31,6 +31,22 @@ try {
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   Copy-Item -Force (Join-Path $Tmp "cetus.exe") (Join-Path $InstallDir "cetus.exe")
   Write-Host "installed cetus $Version ($Channel) to $InstallDir\cetus.exe"
+
+  # Add InstallDir to user PATH if not already present
+  $UserPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+  $PathDirs = if ($UserPath) { $UserPath -split ";" | Where-Object { $_ -ne "" } } else { @() }
+  $NormalizedInstallDir = $InstallDir.TrimEnd("\")
+  $AlreadyInPath = $PathDirs | Where-Object { $_.TrimEnd("\") -ieq $NormalizedInstallDir }
+  if (-not $AlreadyInPath) {
+    $NewPath = ($PathDirs + $NormalizedInstallDir) -join ";"
+    [System.Environment]::SetEnvironmentVariable("PATH", $NewPath, "User")
+    Write-Host ""
+    Write-Host "Added $InstallDir to your user PATH."
+    Write-Host "Restart your terminal for the PATH change to take effect."
+    Write-Host "Or run in the current session: `$env:PATH += ';$InstallDir'"
+  } else {
+    Write-Host "$InstallDir is already in your PATH."
+  }
 } finally {
   Remove-Item -Recurse -Force $Tmp
 }
