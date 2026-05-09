@@ -30,6 +30,15 @@ func (l *renderProgressLogger) Stage(format string, args ...any) {
 	fmt.Fprintf(l.out, "%s\n", fmt.Sprintf(format, args...))
 }
 
+func (l *renderProgressLogger) ResetFrames() {
+	if l == nil {
+		return
+	}
+	l.frameStart = time.Time{}
+	l.lastUpdate = time.Time{}
+	l.lastBucket = -1
+}
+
 func (l *renderProgressLogger) Frames(progress browser.CaptureProgress) {
 	if l == nil || l.out == nil || progress.TotalFrames <= 0 {
 		return

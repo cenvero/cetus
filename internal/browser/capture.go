@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/cenvero/cetus/internal/compose"
 	"github.com/cenvero/cetus/internal/encoder"
@@ -29,6 +31,13 @@ type CaptureProgressFunc func(CaptureProgress)
 type CaptureOptions struct {
 	FramesDir string
 	Resume    bool
+}
+
+type WorkerOptions struct {
+	HTMLPath       string
+	BrowserOptions Options
+	CaptureOptions CaptureOptions
+	Workers        int
 }
 
 func (b *Browser) Capture(ctx context.Context, composition *compose.Composition, enc *encoder.Encoder, progress CaptureProgressFunc) error {
@@ -93,6 +102,173 @@ func cachedFrame(cache *frameCache, frame int) ([]byte, bool, error) {
 		return nil, false, nil
 	}
 	return cache.read(frame)
+}
+
+func CaptureFramesToCache(ctx context.Context, composition *compose.Composition, opts WorkerOptions, progress CaptureProgressFunc) error {
+	if composition == nil {
+		return fmt.Errorf("composition is required")
+	}
+	if strings.TrimSpace(opts.HTMLPath) == "" {
+		return fmt.Errorf("html path is required")
+	}
+	if strings.TrimSpace(opts.CaptureOptions.FramesDir) == "" {
+		return fmt.Errorf("frames directory is required")
+	}
+
+	cache, err := newFrameCache(opts.CaptureOptions, composition)
+	if err != nil {
+		return err
+	}
+	if cache == nil {
+		return fmt.Errorf("frame cache is required")
+	}
+
+	workers := effectiveCaptureWorkers(opts.Workers, composition.TotalFrames)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	frames := make(chan int)
+	var completed atomic.Int64
+	var firstErr error
+	var errMu sync.Mutex
+	setErr := func(err error) {
+		if err == nil {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil {
+			firstErr = err
+			cancel()
+		}
+		errMu.Unlock()
+	}
+
+	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var b *Browser
+			defer func() {
+				if b != nil {
+					b.Close()
+				}
+			}()
+
+			for frame := range frames {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				cached, err := frameCached(cache, frame)
+				if err != nil {
+					setErr(fmt.Errorf("read cached frame %d: %w", frame, err))
+					return
+				}
+				if !cached {
+					if b == nil {
+						created, err := New(ctx, opts.HTMLPath, composition, opts.BrowserOptions)
+						if err != nil {
+							setErr(fmt.Errorf("open worker browser: %w", err))
+							return
+						}
+						b = created
+					}
+					if err := b.captureFrameToCache(frame, composition, cache); err != nil {
+						setErr(err)
+						return
+					}
+				}
+
+				done := int(completed.Add(1))
+				reportCaptureProgress(progress, done, composition.TotalFrames, float64(frame)/float64(composition.FPS))
+			}
+		}()
+	}
+
+sendLoop:
+	for frame := 0; frame < composition.TotalFrames; frame++ {
+		select {
+		case <-ctx.Done():
+			break sendLoop
+		case frames <- frame:
+		}
+	}
+	close(frames)
+	wg.Wait()
+
+	if firstErr != nil {
+		return firstErr
+	}
+	if err := ctx.Err(); err != nil && completed.Load() < int64(composition.TotalFrames) {
+		return fmt.Errorf("capture canceled: %w", err)
+	}
+	return nil
+}
+
+func EncodeCachedFrames(composition *compose.Composition, enc *encoder.Encoder, framesDir string, progress CaptureProgressFunc) error {
+	if composition == nil {
+		return fmt.Errorf("composition is required")
+	}
+	if enc == nil {
+		return fmt.Errorf("encoder is required")
+	}
+	cache, err := newFrameCache(CaptureOptions{FramesDir: framesDir, Resume: true}, composition)
+	if err != nil {
+		return err
+	}
+	if cache == nil {
+		return fmt.Errorf("frame cache is required")
+	}
+
+	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
+	for frame := 0; frame < composition.TotalFrames; frame++ {
+		png, ok, err := cache.read(frame)
+		if err != nil {
+			return fmt.Errorf("read cached frame %d: %w", frame, err)
+		}
+		if !ok {
+			return fmt.Errorf("cached frame %d is missing from %s", frame, framesDir)
+		}
+		if err := enc.WriteFrame(png); err != nil {
+			return fmt.Errorf("encode frame %d: %w", frame, err)
+		}
+		reportCaptureProgress(progress, frame+1, composition.TotalFrames, float64(frame)/float64(composition.FPS))
+	}
+	return nil
+}
+
+func frameCached(cache *frameCache, frame int) (bool, error) {
+	_, ok, err := cache.read(frame)
+	return ok, err
+}
+
+func (b *Browser) captureFrameToCache(frame int, composition *compose.Composition, cache *frameCache) error {
+	t := float64(frame) / float64(composition.FPS)
+	if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(frame, composition.FPS), nil, awaitPromise)); err != nil {
+		return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
+	}
+	png, err := b.captureFrame(t)
+	if err != nil {
+		return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
+	}
+	if err := cache.write(frame, png); err != nil {
+		return fmt.Errorf("write cached frame %d: %w", frame, err)
+	}
+	return nil
+}
+
+func effectiveCaptureWorkers(workers, totalFrames int) int {
+	if workers <= 0 {
+		workers = 1
+	}
+	if totalFrames > 0 && workers > totalFrames {
+		return totalFrames
+	}
+	return workers
 }
 
 func reportCaptureProgress(progress CaptureProgressFunc, completedFrames, totalFrames int, timeSeconds float64) {

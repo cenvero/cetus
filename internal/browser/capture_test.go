@@ -94,3 +94,24 @@ func TestFrameCacheRejectsResumeWithoutManifestWhenFramesExist(t *testing.T) {
 		t.Fatal("newFrameCache accepted frame files without a manifest")
 	}
 }
+
+func TestEffectiveCaptureWorkers(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  int
+		frames int
+		want   int
+	}{
+		{name: "defaults to one", input: 0, frames: 30, want: 1},
+		{name: "keeps requested worker count", input: 4, frames: 30, want: 4},
+		{name: "caps to frame count", input: 8, frames: 3, want: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := effectiveCaptureWorkers(tt.input, tt.frames); got != tt.want {
+				t.Fatalf("effectiveCaptureWorkers() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

@@ -29,6 +29,7 @@ type RenderOptions struct {
 	AudioFadeOutSeconds float64
 	FramesDir           string
 	Resume              bool
+	Concurrency         int
 	NoGPU               bool
 	Timeout             time.Duration
 }
@@ -50,6 +51,10 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 	framesDir := strings.TrimSpace(opts.FramesDir)
 	if opts.Resume && framesDir == "" {
 		framesDir = ".cetus-frames"
+	}
+	workers := opts.Concurrency
+	if workers <= 0 {
+		workers = 1
 	}
 	audioPath := strings.TrimSpace(opts.AudioPath)
 	if audioPath != "" {
@@ -85,7 +90,7 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		return fmt.Errorf("audio start %.3fs must be before render duration %.3fs", opts.AudioStartSeconds, renderDuration)
 	}
 
-	enc, err := encoder.New(ffmpegPath, outputPath, composition.FPS, opts.Format, encoder.Options{
+	encoderOpts := encoder.Options{
 		AudioPath:           audioPath,
 		AudioVolume:         opts.AudioVolume,
 		AudioVolumeSet:      opts.AudioVolumeSet,
@@ -94,15 +99,44 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		AudioFadeInSeconds:  opts.AudioFadeInSeconds,
 		AudioFadeOutSeconds: opts.AudioFadeOutSeconds,
 		DurationSeconds:     renderDuration,
-	})
+	}
+	browserOpts := browser.Options{
+		ChromePath: chromePath,
+		NoGPU:      opts.NoGPU,
+	}
+
+	if framesDir != "" {
+		if err := browser.CaptureFramesToCache(ctx, composition, browser.WorkerOptions{
+			HTMLPath:       inputPath,
+			BrowserOptions: browserOpts,
+			CaptureOptions: browser.CaptureOptions{
+				FramesDir: framesDir,
+				Resume:    opts.Resume,
+			},
+			Workers: workers,
+		}, nil); err != nil {
+			return err
+		}
+		enc, err := encoder.New(ffmpegPath, outputPath, composition.FPS, opts.Format, encoderOpts)
+		if err != nil {
+			return err
+		}
+		if err := browser.EncodeCachedFrames(composition, enc, framesDir, nil); err != nil {
+			_ = enc.Close()
+			return err
+		}
+		if err := enc.Close(); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	enc, err := encoder.New(ffmpegPath, outputPath, composition.FPS, opts.Format, encoderOpts)
 	if err != nil {
 		return err
 	}
 
-	b, err := browser.New(ctx, inputPath, composition, browser.Options{
-		ChromePath: chromePath,
-		NoGPU:      opts.NoGPU,
-	})
+	b, err := browser.New(ctx, inputPath, composition, browserOpts)
 	if err != nil {
 		_ = enc.Close()
 		return err
