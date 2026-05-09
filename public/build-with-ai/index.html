@@ -427,6 +427,33 @@
                 <input id="assets" name="assets" type="text" placeholder="logo.svg, dashboard.png, music.wav">
               </div>
             </div>
+            <div class="row">
+              <div class="field">
+                <label for="audioVolume">Audio Volume</label>
+                <input id="audioVolume" name="audioVolume" type="number" min="0" max="1" step="0.05" value="0.7">
+              </div>
+              <div class="field">
+                <label for="audioLoop">Audio Loop</label>
+                <select id="audioLoop" name="audioLoop">
+                  <option value="no" selected>No loop</option>
+                  <option value="yes">Loop if shorter</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="audioStart">Audio Start</label>
+                <input id="audioStart" name="audioStart" type="number" min="0" step="0.1" value="0">
+              </div>
+              <div class="field">
+                <label for="audioFadeIn">Fade In</label>
+                <input id="audioFadeIn" name="audioFadeIn" type="number" min="0" step="0.1" value="0">
+              </div>
+              <div class="field">
+                <label for="audioFadeOut">Fade Out</label>
+                <input id="audioFadeOut" name="audioFadeOut" type="number" min="0" step="0.1" value="0">
+              </div>
+            </div>
             <div class="field">
               <label for="notes">Extra Notes</label>
               <textarea id="notes" name="notes" placeholder="Brand colors, fonts, words to avoid, mood, references, animation preferences, or accessibility requirements."></textarea>
@@ -528,13 +555,17 @@
     <section class="band">
       <div class="wrap">
         <h2>Example Render Commands</h2>
-        <pre><code>cetus render cetus.html -o out.mp4
+        <pre><code>cetus validate cetus.html
+cetus render cetus.html -o out.mp4
 cetus render cetus.html -o reel.mp4
 cetus render cetus.html -o transparent.webm
 
 # Override HTML defaults only when needed
 cetus render cetus.html -o smooth.mp4 --fps 60
-cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920</code></pre>
+cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920
+cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
+cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-start 2.5 --audio-fade-in 1 --audio-fade-out 2
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames</code></pre>
       </div>
     </section>
   </main>
@@ -584,14 +615,82 @@ cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920</code></pre>
       return "";
     }
 
-    function renderCommand(htmlFile, outputFile, format) {
-      const flag = inferredFormat(outputFile) === format ? "" : ` --format ${format}`;
-      return `cetus render ${htmlFile} -o ${outputFile}${flag}`;
+    function firstAudioAsset(assets) {
+      const match = assets.match(/[^\s,;]+?\.(mp3|wav|m4a|aac|flac|ogg|opus)\b/i);
+      return match ? cleanFileName(match[0], match[0]) : "";
     }
 
-    function overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize) {
+    function commandAudioPath(audio, assets) {
+      if (audio === "No audio") {
+        return "";
+      }
+      const listedAudio = firstAudioAsset(assets);
+      if (listedAudio) {
+        return listedAudio;
+      }
+      if (audio === "Use voiceover timing placeholders") {
+        return "voiceover.mp3";
+      }
+      return "music.mp3";
+    }
+
+    function numberValue(id, fallback) {
+      const parsed = Number(value(id));
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function audioControlValues(audio) {
+      if (audio === "No audio") {
+        return { volume: 1, loop: false, start: 0, fadeIn: 0, fadeOut: 0 };
+      }
+      return {
+        volume: Math.max(0, Math.min(1, numberValue("audioVolume", 1))),
+        loop: value("audioLoop") === "yes",
+        start: Math.max(0, numberValue("audioStart", 0)),
+        fadeIn: Math.max(0, numberValue("audioFadeIn", 0)),
+        fadeOut: Math.max(0, numberValue("audioFadeOut", 0))
+      };
+    }
+
+    function formatSeconds(value) {
+      return Number(value.toFixed(3)).toString();
+    }
+
+    function audioFlags(audioPath, controls) {
+      if (!audioPath) {
+        return "";
+      }
+      const flags = [`--audio ${audioPath}`];
+      if (controls.volume !== 1) {
+        flags.push(`--audio-volume ${formatSeconds(controls.volume)}`);
+      }
+      if (controls.loop) {
+        flags.push("--audio-loop");
+      }
+      if (controls.start > 0) {
+        flags.push(`--audio-start ${formatSeconds(controls.start)}`);
+      }
+      if (controls.fadeIn > 0) {
+        flags.push(`--audio-fade-in ${formatSeconds(controls.fadeIn)}`);
+      }
+      if (controls.fadeOut > 0) {
+        flags.push(`--audio-fade-out ${formatSeconds(controls.fadeOut)}`);
+      }
+      return " " + flags.join(" ");
+    }
+
+    function renderCommand(htmlFile, outputFile, format, audioPath, controls) {
       const flag = inferredFormat(outputFile) === format ? "" : ` --format ${format}`;
-      return `cetus render ${htmlFile} -o ${outputFile}${flag} --fps ${fps} ${commandSize}`;
+      return `cetus render ${htmlFile} -o ${outputFile}${flag}${audioFlags(audioPath, controls)}`;
+    }
+
+    function overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize, audioPath, controls) {
+      const flag = inferredFormat(outputFile) === format ? "" : ` --format ${format}`;
+      return `cetus render ${htmlFile} -o ${outputFile}${flag}${audioFlags(audioPath, controls)} --fps ${fps} ${commandSize}`;
+    }
+
+    function resumeRenderCommand(htmlFile, outputFile, format, audioPath, controls) {
+      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames`;
     }
 
     function cleanFileName(name, fallback) {
@@ -630,8 +729,16 @@ cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920</code></pre>
       }
     }
 
-    function targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand) {
+    function audioInstructions(audio, audioPath, controls) {
+      if (audio === "No audio") {
+        return "No final audio track is required unless I later provide one.";
+      }
+      return `Use Cetus --audio ${audioPath} for the final output audio track with volume ${formatSeconds(controls.volume)}, ${controls.loop ? "looping enabled" : "looping disabled"}, start ${formatSeconds(controls.start)}s, fade-in ${formatSeconds(controls.fadeIn)}s, and fade-out ${formatSeconds(controls.fadeOut)}s. Browser <audio> elements may be used only for visual timing references; do not assume browser audio is recorded from screenshots. If ${audioPath} is a placeholder, ask me for the local music or voiceover file and update the render command.`;
+    }
+
+    function targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand, resumeCommand) {
       const previewCommand = `cetus preview ${htmlFile}`;
+      const validateCommand = `cetus validate ${htmlFile}`;
 
       if (target === "codex") {
         return `You are working as Codex in a shared coding workspace.
@@ -642,16 +749,23 @@ Do the work directly:
 - Do not create a Node.js, npm, Vite, React, or bundler project.
 - If Cetus is installed, run a quick validation command such as:
   cetus version
+  ${validateCommand}
 - If rendering is reasonable in this environment, run:
   ${primaryCommand}
 - If rendering is not possible, explain exactly what command I should run.
-- Final response should include changed file paths, preview command, render command, optional override command, and any asset assumptions.
+- Final response should include changed file paths, validation command, preview command, render command, optional long-render resume command, optional override command, and any asset assumptions.
+
+Validation command:
+${validateCommand}
 
 Preview command:
 ${previewCommand}
 
 Render command:
 ${primaryCommand}
+
+Long-render resume command:
+${resumeCommand}
 
 Override command if I want to ignore HTML defaults:
 ${overrideCommand}`;
@@ -667,10 +781,11 @@ Do the work directly:
 - Do not introduce Node.js, npm, React, Vite, or build tooling.
 - If commands are available, run or propose:
   cetus version
+  ${validateCommand}
   ${previewCommand}
   ${primaryCommand}
 - If you cannot run commands, still provide the exact commands and explain where to run them.
-- Final response should include the created file, how to preview, how to render, and how to adjust duration, FPS, size, and format.`;
+- Final response should include the created file, how to validate, how to preview, how to render, how to use the resumable long-render command, and how to adjust duration, FPS, size, format, and audio.`;
       }
 
       if (target === "terminal-agent") {
@@ -684,10 +799,12 @@ Create a usable local file:
 - Do not use destructive shell commands.
 
 After creating the file, provide:
+- Validation command: ${validateCommand}
 - Preview command: ${previewCommand}
 - Render command: ${primaryCommand}
+- Long-render resume command: ${resumeCommand}
 - Override command: ${overrideCommand}
-- A short note explaining how to change FPS, duration, output dimensions, and format.`;
+- A short note explaining how to change FPS, duration, output dimensions, format, and audio.`;
       }
 
       if (target === "custom-agent") {
@@ -695,17 +812,23 @@ After creating the file, provide:
 
 If you can edit files:
 - Create ${htmlFile} directly.
-- Provide the preview and render commands.
+- Provide the validation, preview, render, and optional long-render resume commands.
 
 If you cannot edit files:
 - Return the full contents of ${htmlFile} in one HTML code block.
 - Then provide the exact commands below.
+
+Validation command:
+${validateCommand}
 
 Preview command:
 ${previewCommand}
 
 Render command:
 ${primaryCommand}
+
+Long-render resume command:
+${resumeCommand}
 
 Override command:
 ${overrideCommand}`;
@@ -719,13 +842,19 @@ Return:
 2. A scene timing plan.
 3. The complete contents of ${htmlFile} in one HTML code block.
 4. A short usage guide that tells me to save the code as ${htmlFile}.
-5. The exact preview and render commands.
+5. The exact validation, preview, render, and optional long-render resume commands.
+
+Validation command:
+${validateCommand}
 
 Preview command:
 ${previewCommand}
 
 Render command:
 ${primaryCommand}
+
+Long-render resume command:
+${resumeCommand}
 
 Override command if I want to ignore HTML defaults:
 ${overrideCommand}`;
@@ -780,8 +909,12 @@ ${overrideCommand}`;
       const scenes = rawScenes || "No scenes provided. Generate a scene plan if the selected scene mode allows it.";
       const frameCount = Number(duration) * Number(fps);
       const commandSize = size.width === "custom" ? "--width WIDTH --height HEIGHT" : `--width ${size.width} --height ${size.height}`;
-      const primaryCommand = renderCommand(htmlFile, outputFile, format);
-      const overrideCommand = overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize);
+      const audioPath = commandAudioPath(audio, assets);
+      const audioControls = audioControlValues(audio);
+      const validateCommand = `cetus validate ${htmlFile}`;
+      const primaryCommand = renderCommand(htmlFile, outputFile, format, audioPath, audioControls);
+      const overrideCommand = overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize, audioPath, audioControls);
+      const resumeCommand = resumeRenderCommand(htmlFile, outputFile, format, audioPath, audioControls);
 
       return `You are helping me build a video with Cetus.
 
@@ -818,6 +951,12 @@ Output controls:
 - Size: ${size.label}
 - Format: ${format.toUpperCase()}
 - Audio: ${audio}
+- Audio render file: ${audioPath || "none"}
+- Audio volume: ${audioPath ? formatSeconds(audioControls.volume) : "none"}
+- Audio loop: ${audioPath ? (audioControls.loop ? "yes" : "no") : "none"}
+- Audio start: ${audioPath ? formatSeconds(audioControls.start) + " seconds" : "none"}
+- Audio fade in: ${audioPath ? formatSeconds(audioControls.fadeIn) + " seconds" : "none"}
+- Audio fade out: ${audioPath ? formatSeconds(audioControls.fadeOut) + " seconds" : "none"}
 - HTML file: ${htmlFile}
 - Video output file: ${outputFile}
 
@@ -833,17 +972,20 @@ ${sceneInstructions(sceneMode, rawScenes, type, duration, pacing)}
 Extra notes:
 ${notes}
 
+Audio handling:
+${audioInstructions(audio, audioPath, audioControls)}
+
 Before writing code, ask me only for missing information that is truly required. Treat blank source, scenes, assets, and notes as optional unless the selected scene planning mode explicitly asks for more input. If enough information is present, make reasonable creative assumptions, list those assumptions briefly, and proceed.
 
 Create:
 1. A short video concept.
 2. A scene-by-scene timing plan with start time and duration for each scene.
 3. A complete single-file Cetus HTML composition named ${htmlFile}.
-4. A usage guide with preview, render, and optional override commands.
+4. A usage guide with validate, preview, render, optional long-render resume, and optional override commands.
 5. Notes for changing duration, FPS, size, format, text, colors, and assets.
 
 Target-specific instructions:
-${targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand)}
+${targetInstructions(target, htmlFile, outputFile, primaryCommand, overrideCommand, resumeCommand)}
 
 Cetus composition rules:
 - Use one root element with data-composition-id, data-width, data-height, data-duration, and data-fps.
@@ -854,6 +996,9 @@ Cetus composition rules:
 - data-start and data-duration are in seconds.
 - Higher data-track-index means the element appears above lower tracks.
 - If media elements are used, include data-volume when relevant.
+- For final music or voiceover, use the render command's --audio flag. Do not rely on browser audio playback being captured into the output video.
+- If final audio is requested, include the selected --audio-volume, --audio-loop, --audio-start, --audio-fade-in, and --audio-fade-out flags in render commands when applicable.
+- For long videos, high FPS, 4K output, or fragile environments, include the optional resumable render command with --resume --frames-dir .cetus-frames. Explain that this saves PNG frames only when requested and can use disk space.
 - Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
 - If GSAP is useful, you may use it, but every GSAP timeline must be paused and registered on window.__timelines so Cetus can seek it.
 - GSAP pattern to follow when GSAP is loaded:
@@ -884,14 +1029,20 @@ FPS control:
 - The normal render command should not repeat --fps, --width, or --height when the HTML already contains them.
 - The CLI can override HTML defaults with --fps, --width, and --height only when I intentionally want a different render.
 
-Render command:
-${primaryCommand}
-
-Optional override command:
-${overrideCommand}
+Validation command:
+${validateCommand}
 
 Preview command:
 cetus preview ${htmlFile}
+
+Render command:
+${primaryCommand}
+
+Optional long-render resume command:
+${resumeCommand}
+
+Optional override command:
+${overrideCommand}
 
 Installation command if Cetus is missing:
 curl -fsSL https://cetus.cenvero.org/install | sh
