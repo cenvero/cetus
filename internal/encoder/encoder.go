@@ -19,6 +19,36 @@ type Options struct {
 	AudioFadeInSeconds  float64
 	AudioFadeOutSeconds float64
 	DurationSeconds     float64
+	Quality             int    // CRF value; 0 means use codec default
+	Scale               string // ffmpeg scale filter value, e.g. "scale=-2:720"
+	FrameCodec          string // input frame codec: "" or "png" (default) or "webp"
+}
+
+// ParseScale converts a user-supplied scale string to an ffmpeg scale filter value.
+// Accepted values: 480p, 720p, 1080p, 4k, or WxH (e.g. 1920x1080). Empty string is valid and means no scaling.
+func ParseScale(s string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "":
+		return "", nil
+	case "480p":
+		return "scale=-2:480", nil
+	case "720p":
+		return "scale=-2:720", nil
+	case "1080p":
+		return "scale=-2:1080", nil
+	case "4k":
+		return "scale=-2:2160", nil
+	default:
+		parts := strings.SplitN(strings.ToLower(s), "x", 2)
+		if len(parts) == 2 {
+			w, errW := strconv.Atoi(strings.TrimSpace(parts[0]))
+			h, errH := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if errW == nil && errH == nil && w > 0 && h > 0 {
+				return fmt.Sprintf("scale=%d:%d", w, h), nil
+			}
+		}
+		return "", fmt.Errorf("invalid scale %q; use 480p, 720p, 1080p, 4k, or WxH (e.g. 1920x1080)", s)
+	}
 }
 
 type Encoder struct {
@@ -72,11 +102,11 @@ func New(ffmpegPath, output string, fps int, format string, opts Options) (*Enco
 	return enc, nil
 }
 
-func (e *Encoder) WriteFrame(png []byte) error {
-	if len(png) == 0 {
-		return fmt.Errorf("frame PNG is empty")
+func (e *Encoder) WriteFrame(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("frame data is empty")
 	}
-	if _, err := e.stdin.Write(png); err != nil {
+	if _, err := e.stdin.Write(data); err != nil {
 		return fmt.Errorf("write frame to ffmpeg: %w", err)
 	}
 	return nil
@@ -91,6 +121,21 @@ func (e *Encoder) Close() error {
 	}
 	if err := <-e.done; err != nil {
 		return fmt.Errorf("ffmpeg encode failed: %w", err)
+	}
+	return nil
+}
+
+// ExtractFrame converts a single image file to an output image using ffmpeg.
+func ExtractFrame(ffmpegPath, inputPath, outputPath string) error {
+	var stderr bytes.Buffer
+	cmd := exec.Command(ffmpegPath, "-i", inputPath, "-y", outputPath) // #nosec G204
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return fmt.Errorf("ffmpeg extract frame: %w: %s", err, msg)
+		}
+		return fmt.Errorf("ffmpeg extract frame: %w", err)
 	}
 	return nil
 }
@@ -115,33 +160,59 @@ func ResolveFormat(output, explicit string) (string, error) {
 }
 
 func buildFFmpegArgs(output string, fps int, format string, opts Options) []string {
+	frameCodec := opts.FrameCodec
+	if frameCodec == "" {
+		frameCodec = "png"
+	}
+
 	args := []string{
 		"-f", "image2pipe",
-		"-vcodec", "png",
-		"-r", fmt.Sprintf("%d", fps),
+		"-vcodec", frameCodec,
+		"-r", strconv.Itoa(fps),
 		"-i", "pipe:0",
 	}
+
 	audioPath := strings.TrimSpace(opts.AudioPath)
 	hasAudio := audioPath != ""
+	var audioFilter string
+	var hasComplexAudio bool
+	if hasAudio {
+		audioFilter, hasComplexAudio = buildAudioFilter(opts)
+	}
+
 	if hasAudio {
 		if opts.AudioLoop {
 			args = append(args, "-stream_loop", "-1")
 		}
 		args = append(args, "-i", audioPath)
-		if filter, ok := buildAudioFilter(opts); ok {
-			args = append(args, "-filter_complex", filter, "-map", "0:v:0", "-map", "[cetus_audio]")
-		} else {
-			args = append(args, "-map", "0:v:0", "-map", "1:a:0?")
-		}
+	}
+
+	// Wire video and audio streams, incorporating scale filter if requested.
+	switch {
+	case opts.Scale != "" && hasComplexAudio:
+		combined := "[0:v:0]" + opts.Scale + "[vout];" + audioFilter
+		args = append(args, "-filter_complex", combined, "-map", "[vout]", "-map", "[cetus_audio]")
+	case opts.Scale != "" && hasAudio:
+		args = append(args, "-filter_complex", "[0:v:0]"+opts.Scale+"[vout]", "-map", "[vout]", "-map", "1:a:0?")
+	case hasComplexAudio:
+		args = append(args, "-filter_complex", audioFilter, "-map", "0:v:0", "-map", "[cetus_audio]")
+	case hasAudio:
+		args = append(args, "-map", "0:v:0", "-map", "1:a:0?")
+	case opts.Scale != "":
+		args = append(args, "-vf", opts.Scale)
 	}
 
 	switch format {
 	case "webm":
+		crfVal := 30
+		if opts.Quality > 0 {
+			crfVal = opts.Quality
+		}
 		args = append(args,
 			"-vcodec", "libvpx-vp9",
 			"-pix_fmt", "yuva420p",
 			"-b:v", "0",
-			"-crf", "30",
+			"-crf", strconv.Itoa(crfVal),
 		)
 		if hasAudio {
 			args = append(args, "-c:a", "libopus", "-b:a", "160k")
@@ -153,6 +224,9 @@ func buildFFmpegArgs(output string, fps int, format string, opts Options) []stri
 			"-vcodec", "libx264",
 			"-pix_fmt", "yuv420p",
 		)
+		if opts.Quality > 0 {
+			args = append(args, "-crf", strconv.Itoa(opts.Quality))
+		}
 		if hasAudio {
 			args = append(args, "-c:a", "aac", "-b:a", "192k")
 		} else {

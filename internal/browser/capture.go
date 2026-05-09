@@ -69,7 +69,7 @@ func (b *Browser) CaptureWithOptions(ctx context.Context, composition *compose.C
 		}
 
 		t := float64(frame) / float64(composition.FPS)
-		png, cached, err := cachedFrame(cache, frame)
+		data, cached, err := cachedFrame(cache, frame)
 		if err != nil {
 			return fmt.Errorf("read cached frame %d: %w", frame, err)
 		}
@@ -78,17 +78,17 @@ func (b *Browser) CaptureWithOptions(ctx context.Context, composition *compose.C
 				return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
 			}
 
-			png, err = b.captureFrame(t)
+			data, err = b.captureFrame(t)
 			if err != nil {
 				return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
 			}
 			if cache != nil {
-				if err := cache.write(frame, png); err != nil {
+				if err := cache.write(frame, data); err != nil {
 					return fmt.Errorf("write cached frame %d: %w", frame, err)
 				}
 			}
 		}
-		if err := enc.WriteFrame(png); err != nil {
+		if err := enc.WriteFrame(data); err != nil {
 			return fmt.Errorf("encode frame %d: %w", frame, err)
 		}
 		reportCaptureProgress(progress, frame+1, composition.TotalFrames, t)
@@ -145,7 +145,7 @@ func CaptureFramesToCache(ctx context.Context, composition *compose.Composition,
 
 	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
 	var wg sync.WaitGroup
-	for worker := 0; worker < workers; worker++ {
+	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -226,19 +226,65 @@ func EncodeCachedFrames(composition *compose.Composition, enc *encoder.Encoder, 
 
 	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
 	for frame := 0; frame < composition.TotalFrames; frame++ {
-		png, ok, err := cache.read(frame)
+		data, ok, err := cache.read(frame)
 		if err != nil {
 			return fmt.Errorf("read cached frame %d: %w", frame, err)
 		}
 		if !ok {
 			return fmt.Errorf("cached frame %d is missing from %s", frame, framesDir)
 		}
-		if err := enc.WriteFrame(png); err != nil {
+		if err := enc.WriteFrame(data); err != nil {
 			return fmt.Errorf("encode frame %d: %w", frame, err)
 		}
 		reportCaptureProgress(progress, frame+1, composition.TotalFrames, float64(frame)/float64(composition.FPS))
 	}
 	return nil
+}
+
+// CompositionFromCache reads config.cetus from dir and returns a minimal Composition for encoding.
+func CompositionFromCache(dir string) (*compose.Composition, error) {
+	manifest, ok, err := readFrameCacheManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("config.cetus not found in %s; cannot encode without it", dir)
+	}
+	return &compose.Composition{
+		ID:          manifest.CompositionID,
+		Width:       manifest.Width,
+		Height:      manifest.Height,
+		FPS:         manifest.FPS,
+		Duration:    manifest.Duration,
+		TotalFrames: manifest.TotalFrames,
+	}, nil
+}
+
+// FrameCodecFromCache returns the frame codec stored in config.cetus, defaulting to "webp".
+func FrameCodecFromCache(dir string) string {
+	manifest, ok, _ := readFrameCacheManifest(dir)
+	if !ok || manifest.FrameFormat == "" {
+		return "webp"
+	}
+	return manifest.FrameFormat
+}
+
+// ReadCachedFrame returns the raw frame bytes for the given frame index from a frames directory.
+func ReadCachedFrame(dir string, frame int) ([]byte, bool, error) {
+	root, err := openFrameCacheRoot(dir)
+	if err != nil {
+		return nil, false, err
+	}
+	defer root.Close()
+
+	data, err := root.ReadFile(frameFileName(frame))
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return data, len(data) > 0, nil
 }
 
 func frameCached(cache *frameCache, frame int) (bool, error) {
@@ -251,11 +297,11 @@ func (b *Browser) captureFrameToCache(frame int, composition *compose.Compositio
 	if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(frame, composition.FPS), nil, awaitPromise)); err != nil {
 		return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
 	}
-	png, err := b.captureFrame(t)
+	data, err := b.captureFrame(t)
 	if err != nil {
 		return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
 	}
-	if err := cache.write(frame, png); err != nil {
+	if err := cache.write(frame, data); err != nil {
 		return fmt.Errorf("write cached frame %d: %w", frame, err)
 	}
 	return nil
@@ -305,7 +351,7 @@ func beginFrame(ctx context.Context, t float64) ([]byte, error) {
 	params := map[string]any{
 		"frameTimeTicks": t,
 		"screenshot": map[string]any{
-			"format":  "png",
+			"format":  "webp",
 			"quality": 100,
 		},
 	}
@@ -328,17 +374,18 @@ func captureScreenshot(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("activate page before screenshot: %w", err)
 	}
 
-	png, err := page.CaptureScreenshot().
-		WithFormat(page.CaptureScreenshotFormatPng).
+	data, err := page.CaptureScreenshot().
+		WithFormat(page.CaptureScreenshotFormatWebp).
+		WithQuality(100).
 		WithFromSurface(true).
 		Do(targetCtx)
 	if err != nil {
 		return nil, fmt.Errorf("capture page screenshot: %w", err)
 	}
-	if len(png) == 0 {
+	if len(data) == 0 {
 		return nil, fmt.Errorf("Page.captureScreenshot returned no screenshot data")
 	}
-	return png, nil
+	return data, nil
 }
 
 func targetExecutorContext(ctx context.Context) (context.Context, error) {
@@ -615,11 +662,12 @@ type frameCacheManifest struct {
 	FPS           int     `json:"fps"`
 	Duration      float64 `json:"duration"`
 	TotalFrames   int     `json:"total_frames"`
+	FrameFormat   string  `json:"frame_format"`
 }
 
-const frameCacheManifestName = "cetus-frames.json"
+const frameCacheManifestName = "config.cetus"
 
-var frameCacheFilePattern = regexp.MustCompile(`^frame-[0-9]+\.png$`)
+var frameCacheFilePattern = regexp.MustCompile(`^frame-[0-9]+\.webp$`)
 
 func newFrameCache(opts CaptureOptions, composition *compose.Composition) (*frameCache, error) {
 	dir := strings.TrimSpace(opts.FramesDir)
@@ -656,6 +704,7 @@ func manifestForComposition(composition *compose.Composition) frameCacheManifest
 		FPS:           composition.FPS,
 		Duration:      composition.Duration,
 		TotalFrames:   composition.TotalFrames,
+		FrameFormat:   "webp",
 	}
 }
 
@@ -779,15 +828,15 @@ func (c *frameCache) read(frame int) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if len(data) == 0 {
+	if !isValidWebPData(data) {
 		return nil, false, nil
 	}
 	return data, true, nil
 }
 
-func (c *frameCache) write(frame int, png []byte) error {
-	if len(png) == 0 {
-		return fmt.Errorf("frame PNG is empty")
+func (c *frameCache) write(frame int, data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("frame data is empty")
 	}
 	root, err := openFrameCacheRoot(c.dir)
 	if err != nil {
@@ -797,7 +846,7 @@ func (c *frameCache) write(frame int, png []byte) error {
 
 	name := frameFileName(frame)
 	tmpName := name + ".tmp"
-	if err := root.WriteFile(tmpName, png, 0o600); err != nil {
+	if err := root.WriteFile(tmpName, data, 0o600); err != nil {
 		return err
 	}
 	if err := root.Rename(tmpName, name); err != nil {
@@ -816,5 +865,11 @@ func openFrameCacheRoot(dir string) (*os.Root, error) {
 }
 
 func frameFileName(frame int) string {
-	return fmt.Sprintf("frame-%06d.png", frame)
+	return fmt.Sprintf("frame-%09d.webp", frame)
+}
+
+func isValidWebPData(data []byte) bool {
+	return len(data) >= 12 &&
+		data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
+		data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P'
 }

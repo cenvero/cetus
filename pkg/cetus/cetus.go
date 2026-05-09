@@ -32,6 +32,9 @@ type RenderOptions struct {
 	Concurrency         int
 	NoGPU               bool
 	Timeout             time.Duration
+	Quality             int
+	Scale               string
+	KeepFrames          bool
 }
 
 func Parse(path string) (*compose.Composition, error) {
@@ -46,6 +49,10 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		return fmt.Errorf("output path is required")
 	}
 	if err := validateRenderAudioOptions(opts); err != nil {
+		return err
+	}
+	scaleFilter, err := encoder.ParseScale(opts.Scale)
+	if err != nil {
 		return err
 	}
 	framesDir := strings.TrimSpace(opts.FramesDir)
@@ -99,6 +106,9 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		AudioFadeInSeconds:  opts.AudioFadeInSeconds,
 		AudioFadeOutSeconds: opts.AudioFadeOutSeconds,
 		DurationSeconds:     renderDuration,
+		Quality:             opts.Quality,
+		Scale:               scaleFilter,
+		FrameCodec:          "webp",
 	}
 	browserOpts := browser.Options{
 		ChromePath: chromePath,
@@ -127,6 +137,9 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		}
 		if err := enc.Close(); err != nil {
 			return err
+		}
+		if !opts.KeepFrames {
+			_ = os.RemoveAll(framesDir)
 		}
 		return nil
 	}

@@ -195,6 +195,7 @@
         <a href="#install">Install</a>
         <a href="#commands">Commands</a>
         <a href="#output-controls">Output Controls</a>
+        <a href="#encode">Encode &amp; Frames</a>
         <a href="#validation">Validation</a>
         <a href="#composition">Composition HTML</a>
         <a href="#clips">Clips</a>
@@ -218,6 +219,7 @@ curl -fsSL https://cetus.cenvero.org/install-rc | sh</code></pre>
           <pre><code>cetus validate cetus.html
 cetus render cetus.html -o out.mp4
 cetus render cetus.html -o out.webm
+cetus encode .cetus-frames -o out.mp4
 cetus preview cetus.html
 cetus update check
 cetus update apply
@@ -231,9 +233,13 @@ cetus version</code></pre>
             <tr><td><code>--width</code>, <code>--height</code></td><td>Override composition dimensions.</td></tr>
             <tr><td><code>--format</code></td><td><code>mp4</code> or <code>webm</code>. Defaults from output extension.</td></tr>
             <tr><td><code>--audio</code></td><td>Local audio file to mux into the final output.</td></tr>
-            <tr><td><code>--resume</code>, <code>--frames-dir</code></td><td>Opt-in resumable frame cache for long renders.</td></tr>
-            <tr><td><code>--concurrency</code></td><td>Parallel browser workers when the frame cache is enabled.</td></tr>
+            <tr><td><code>--scale</code></td><td>Scale output: <code>480p</code>, <code>720p</code>, <code>1080p</code>, <code>4k</code>, or <code>WxH</code> (e.g. <code>1920x1080</code>). Applied at encode time, no re-render needed.</td></tr>
+            <tr><td><code>--quality</code></td><td>Encoder CRF value (0–51). Lower is better quality and larger file. 0 means codec default.</td></tr>
+            <tr><td><code>--resume</code>, <code>--frames-dir</code></td><td>Opt-in resumable frame cache for long renders. Frames are saved as WebP and deleted after a successful render unless <code>--keep-frames</code> is set.</td></tr>
+            <tr><td><code>--keep-frames</code></td><td>Keep the frame cache directory after a successful render.</td></tr>
+            <tr><td><code>--concurrency</code></td><td>Parallel browser workers when the frame cache is enabled. Default is 1 (sequential).</td></tr>
             <tr><td><code>--no-gpu</code></td><td>Disable GPU acceleration for CI, Docker, or headless Linux servers.</td></tr>
+            <tr><td><code>--progress-format</code></td><td><code>text</code> (default) or <code>json</code>. JSON emits newline-delimited objects for CI and build pipelines.</td></tr>
           </table>
         </section>
 
@@ -283,10 +289,47 @@ cetus render cetus.html -o out.webm --audio voiceover.wav --audio-fade-out 1.5</
           <pre><code>cetus render cetus.html -o out.mp4 --timeout 600
 cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
 
-          <h3>Resume</h3>
-          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frame PNGs and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. When the frame cache is enabled, <code>--concurrency</code> controls parallel browser workers. Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
-          <pre><code>cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
-cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames --concurrency 4</code></pre>
+          <h3>Scale</h3>
+          <p>Use <code>--scale</code> to resize the output at encode time without re-capturing frames. Useful for delivery variants from the same source render.</p>
+          <pre><code>cetus render cetus.html -o out-480p.mp4 --scale 480p
+cetus render cetus.html -o out-4k.mp4 --scale 4k
+cetus render cetus.html -o out.mp4 --scale 1280x720</code></pre>
+
+          <h3>Quality</h3>
+          <p>Use <code>--quality</code> to set the encoder CRF value (0–51). Lower values produce better quality at larger file sizes. The default (0) uses the codec's built-in default: CRF 23 for H.264 MP4 and CRF 30 for VP9 WebM. For high-quality archival output use 18 or lower. For smaller delivery files use 28 or higher.</p>
+          <pre><code>cetus render cetus.html -o archive.mp4 --quality 18
+cetus render cetus.html -o delivery.mp4 --quality 28</code></pre>
+
+          <h3>Resume and Frame Cache</h3>
+          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frames and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. Frames are saved as WebP (lossless-quality, ~30% smaller than PNG). After a successful render, the frame cache is deleted automatically unless <code>--keep-frames</code> is passed. When the frame cache is enabled, <code>--concurrency</code> controls parallel browser workers (default 1). Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --resume
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
+cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames
+cetus render cetus.html -o out.mp4 --resume --keep-frames</code></pre>
+
+          <h3>Encode Subcommand</h3>
+          <p>Once a frame cache exists (from <code>--frames-dir</code> or <code>--resume --keep-frames</code>), use <code>cetus encode</code> to build a video without re-running the browser. The frame cache directory contains a <code>config.cetus</code> file that records the composition metadata so the encoder has everything it needs. Multiple <code>-o</code> flags produce multiple output files from the same frames.</p>
+          <pre><code># Encode from an existing frame cache
+cetus encode .cetus-frames -o out.mp4
+
+# Multiple output resolutions from one cache
+cetus encode .cetus-frames -o full.mp4 -o preview.mp4 --scale 720p
+
+# Extract a thumbnail at a specific timestamp
+cetus encode .cetus-frames --thumbnail 5s -o thumb.png
+cetus encode .cetus-frames --thumbnail 01:30 -o thumb.jpg
+
+# Override quality or fps when re-encoding
+cetus encode .cetus-frames -o archive.mp4 --quality 18
+cetus encode .cetus-frames -o out.mp4 --fps 24</code></pre>
+
+          <h3>Progress Format (JSON)</h3>
+          <p>Use <code>--progress-format json</code> to emit newline-delimited JSON progress events to stderr instead of human-readable text. Each line is one event. Useful for CI pipelines, build servers, and custom dashboards that parse render progress programmatically.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --progress-format json 2>progress.ndjson
+
+# Event shapes:
+# {"type":"stage","message":"Parsing composition..."}
+# {"type":"frames","completed":300,"total":1800,"percent":16.67,"elapsed_ms":4200,"eta_ms":21000}</code></pre>
         </section>
 
         <section id="validation">
@@ -365,7 +408,7 @@ cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames --concurren
   -> parse data attributes
   -> launch embedded headless browser
   -> seek frame state
-  -> capture PNG frame
+  -> capture WebP frame
   -> pipe frames to embedded ffmpeg
   -> write MP4 or WebM</code></pre>
           <p>On first render, Cetus extracts its embedded browser bundle and ffmpeg into <code>~/.cenvero-cetus/&lt;version&gt;</code>. If the browser bundle is incomplete, Cetus repairs that cache by extracting it again.</p>

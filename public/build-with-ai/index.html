@@ -490,11 +490,23 @@
           </article>
           <article class="control">
             <h3>Size</h3>
-            <p><code>data-width</code> and <code>data-height</code> define the HTML canvas. <code>--width</code> and <code>--height</code> override the output size.</p>
+            <p><code>data-width</code> and <code>data-height</code> define the HTML canvas. <code>--width</code> and <code>--height</code> override the output size at render time.</p>
           </article>
           <article class="control">
             <h3>Format</h3>
             <p><code>.mp4</code> uses H.264 for broad compatibility. <code>.webm</code> uses VP9 and is useful for browser-native workflows.</p>
+          </article>
+          <article class="control">
+            <h3>Scale</h3>
+            <p><code>--scale 480p</code>, <code>720p</code>, <code>1080p</code>, <code>4k</code>, or <code>WxH</code> resizes the output at encode time. No re-render needed — use it to produce delivery variants from one render.</p>
+          </article>
+          <article class="control">
+            <h3>Quality</h3>
+            <p><code>--quality 0–51</code> sets the encoder CRF. Lower is better quality and larger file. For high-quality output use 18 or lower. For smaller delivery files use 28 or higher. Default (0) uses the codec default.</p>
+          </article>
+          <article class="control">
+            <h3>Higher Quality Output</h3>
+            <p>For the best possible output: render at the native composition size with <code>--quality 18</code> and no scaling, then use <code>cetus encode</code> to produce scaled-down delivery copies from the frame cache. This keeps maximum fidelity in the source render.</p>
           </article>
         </div>
       </div>
@@ -565,7 +577,24 @@ cetus render cetus.html -o smooth.mp4 --fps 60
 cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-start 2.5 --audio-fade-in 1 --audio-fade-out 2
-cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4</code></pre>
+
+# Scale output at encode time (no re-render)
+cetus render cetus.html -o out-720p.mp4 --scale 720p
+cetus render cetus.html -o out-4k.mp4 --scale 4k
+
+# Quality control (CRF — lower = better quality, larger file)
+cetus render cetus.html -o archive.mp4 --quality 18
+cetus render cetus.html -o delivery.mp4 --quality 28
+
+# Resumable long render — frames saved as WebP, deleted after success
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
+
+# Keep frames and re-encode into multiple resolutions
+cetus render cetus.html -o out.mp4 --resume --keep-frames
+cetus encode .cetus-frames -o full-1080p.mp4 -o preview-480p.mp4 --scale 480p
+
+# Extract a thumbnail from the frame cache
+cetus encode .cetus-frames --thumbnail 5s -o thumb.png</code></pre>
       </div>
     </section>
   </main>
@@ -690,7 +719,7 @@ cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurr
     }
 
     function resumeRenderCommand(htmlFile, outputFile, format, audioPath, controls) {
-      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames --concurrency 4`;
+      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames`;
     }
 
     function cleanFileName(name, fallback) {
@@ -998,7 +1027,9 @@ Cetus composition rules:
 - If media elements are used, include data-volume when relevant.
 - For final music or voiceover, use the render command's --audio flag. Do not rely on browser audio playback being captured into the output video.
 - If final audio is requested, include the selected --audio-volume, --audio-loop, --audio-start, --audio-fade-in, and --audio-fade-out flags in render commands when applicable.
-- For long videos, high FPS, 4K output, or fragile environments, include the optional parallel resumable render command with --resume --frames-dir .cetus-frames --concurrency 4. Explain that this saves PNG frames only when requested and can use disk space.
+- For long videos, high FPS, 4K output, or fragile environments, include the optional resumable render command with --resume --frames-dir .cetus-frames. Explain that this saves WebP frames while rendering, auto-deletes them after a successful render, and can be resumed if interrupted. Add --concurrency N only if the user explicitly wants parallel workers. Add --keep-frames only if the user wants to re-encode or extract thumbnails from the cache later.
+- If the user wants higher quality output, suggest --quality 18 (or lower) for the render and use cetus encode to produce scaled-down delivery copies from the frame cache.
+- If the user wants multiple output resolutions, suggest rendering once with --keep-frames, then running cetus encode .cetus-frames -o full.mp4 -o preview.mp4 --scale 480p for the variants.
 - Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
 - If GSAP is useful, you may use it, but every GSAP timeline must be paused and registered on window.__timelines so Cetus can seek it.
 - GSAP pattern to follow when GSAP is loaded:

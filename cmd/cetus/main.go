@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ func newRootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.AddCommand(newRenderCommand())
+	root.AddCommand(newEncodeCommand())
 	root.AddCommand(newValidateCommand())
 	root.AddCommand(newPreviewCommand())
 	root.AddCommand(newUpdateCommand())
@@ -56,6 +59,10 @@ func newRenderCommand() *cobra.Command {
 	var framesDir string
 	var resume bool
 	var noGPU bool
+	var scale string
+	var quality int
+	var keepFrames bool
+	var progressFormat string
 
 	cmd := &cobra.Command{
 		Use:   "render cetus.html -o out.mp4",
@@ -73,6 +80,16 @@ func newRenderCommand() *cobra.Command {
 			}
 			if err := validateAudioFlagValues(audioVolume, audioStartSeconds, audioFadeInSeconds, audioFadeOutSeconds); err != nil {
 				return err
+			}
+			scaleFilter, err := encoder.ParseScale(scale)
+			if err != nil {
+				return err
+			}
+			if quality < 0 || quality > 51 {
+				return fmt.Errorf("quality must be between 0 and 51 (0 = codec default)")
+			}
+			if progressFormat != "" && progressFormat != "text" && progressFormat != "json" {
+				return fmt.Errorf("progress-format must be text or json")
 			}
 			framesDir = strings.TrimSpace(framesDir)
 			if resume && framesDir == "" {
@@ -101,7 +118,7 @@ func newRenderCommand() *cobra.Command {
 			}
 
 			start := time.Now()
-			progress := newRenderProgressLogger(cmd.ErrOrStderr())
+			progress := newProgressLogger(cmd.ErrOrStderr(), progressFormat)
 
 			chromePath, ffmpegPath, err := assets.EnsureAssetsWithProgress(version.Version, func(event assets.ProgressEvent) {
 				progress.Stage("%s...", event.Message)
@@ -155,6 +172,9 @@ func newRenderCommand() *cobra.Command {
 				AudioFadeInSeconds:  audioFadeInSeconds,
 				AudioFadeOutSeconds: audioFadeOutSeconds,
 				DurationSeconds:     renderDuration,
+				Quality:             quality,
+				Scale:               scaleFilter,
+				FrameCodec:          "webp",
 			}
 			browserOpts := browser.Options{
 				ChromePath: chromePath,
@@ -194,6 +214,12 @@ func newRenderCommand() *cobra.Command {
 				progress.Stage("Finalizing %s output...", resolvedFormat)
 				if err := enc.Close(); err != nil {
 					return err
+				}
+
+				if !keepFrames {
+					if err := os.RemoveAll(framesDir); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not remove frames directory %s: %v\n", framesDir, err)
+					}
 				}
 
 				fmt.Fprintf(cmd.OutOrStdout(), "Rendered %s (%d frames, %s) in %s\n", output, composition.TotalFrames, resolvedFormat, time.Since(start).Round(time.Millisecond))
@@ -246,10 +272,158 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().Float64Var(&audioStartSeconds, "audio-start", 0, "audio start time in seconds on the render timeline")
 	cmd.Flags().Float64Var(&audioFadeInSeconds, "audio-fade-in", 0, "audio fade-in duration in seconds")
 	cmd.Flags().Float64Var(&audioFadeOutSeconds, "audio-fade-out", 0, "audio fade-out duration in seconds")
-	cmd.Flags().StringVar(&framesDir, "frames-dir", "", "directory for cached PNG frames")
+	cmd.Flags().StringVar(&framesDir, "frames-dir", "", "directory for cached WebP frames")
 	cmd.Flags().BoolVar(&resume, "resume", false, "reuse existing frames from --frames-dir; defaults to .cetus-frames when no directory is set")
 	cmd.Flags().BoolVar(&noGPU, "no-gpu", false, "disable GPU acceleration")
+	cmd.Flags().StringVar(&scale, "scale", "", "scale output resolution: 480p, 720p, 1080p, 4k, or WxH (e.g. 1920x1080)")
+	cmd.Flags().IntVar(&quality, "quality", 0, "encoder CRF quality (0 = codec default; lower = better quality, larger file)")
+	cmd.Flags().BoolVar(&keepFrames, "keep-frames", false, "keep the frame cache directory after a successful render")
+	cmd.Flags().StringVar(&progressFormat, "progress-format", "text", "progress output format: text or json")
 	_ = cmd.MarkFlagRequired("output")
+
+	return cmd
+}
+
+func newEncodeCommand() *cobra.Command {
+	var outputs []string
+	var fps int
+	var format string
+	var scale string
+	var quality int
+	var thumbnail string
+	var keepFrames bool
+	var timeoutSeconds int
+	var progressFormat string
+
+	cmd := &cobra.Command{
+		Use:   "encode <frames-dir>",
+		Short: "Encode a frame cache directory into a video (or extract a thumbnail)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			framesDir := args[0]
+
+			if len(outputs) == 0 {
+				return fmt.Errorf("at least one -o/--output is required")
+			}
+			if progressFormat != "" && progressFormat != "text" && progressFormat != "json" {
+				return fmt.Errorf("progress-format must be text or json")
+			}
+
+			scaleFilter, err := encoder.ParseScale(scale)
+			if err != nil {
+				return err
+			}
+			if quality < 0 || quality > 51 {
+				return fmt.Errorf("quality must be between 0 and 51 (0 = codec default)")
+			}
+
+			composition, err := browser.CompositionFromCache(framesDir)
+			if err != nil {
+				return err
+			}
+			frameCodec := browser.FrameCodecFromCache(framesDir)
+
+			if cmd.Flags().Changed("fps") {
+				composition.FPS = fps
+				composition.TotalFrames = int(math.Round(composition.Duration * float64(fps)))
+			}
+
+			progress := newProgressLogger(cmd.ErrOrStderr(), progressFormat)
+
+			_, ffmpegPath, err := assets.EnsureAssetsWithProgress(version.Version, func(event assets.ProgressEvent) {
+				progress.Stage("%s...", event.Message)
+			})
+			if err != nil {
+				return err
+			}
+
+			ctx, cancel := renderContext(cmd.Context(), timeoutSeconds)
+			defer cancel()
+
+			if thumbnail != "" {
+				ts, err := parseTimestamp(thumbnail)
+				if err != nil {
+					return err
+				}
+				frameIndex := int(math.Round(ts * float64(composition.FPS)))
+				if frameIndex >= composition.TotalFrames {
+					frameIndex = composition.TotalFrames - 1
+				}
+				if frameIndex < 0 {
+					frameIndex = 0
+				}
+				data, ok, err := browser.ReadCachedFrame(framesDir, frameIndex)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return fmt.Errorf("frame %d (%.3fs) is not in the cache at %s", frameIndex, ts, framesDir)
+				}
+				for _, out := range outputs {
+					tmp := out + ".frame.tmp"
+					if err := os.WriteFile(tmp, data, 0o600); err != nil {
+						return fmt.Errorf("write temp frame: %w", err)
+					}
+					if convErr := encoder.ExtractFrame(ffmpegPath, tmp, out); convErr != nil {
+						_ = os.Remove(tmp)
+						return convErr
+					}
+					_ = os.Remove(tmp)
+					fmt.Fprintf(cmd.OutOrStdout(), "Saved thumbnail %s (frame %d at %.3fs)\n", out, frameIndex, ts)
+				}
+				return nil
+			}
+
+			_ = ctx
+			start := time.Now()
+			for _, out := range outputs {
+				resolvedFormat, err := encoder.ResolveFormat(out, format)
+				if err != nil {
+					return err
+				}
+
+				encoderOpts := encoder.Options{
+					Quality:    quality,
+					Scale:      scaleFilter,
+					FrameCodec: frameCodec,
+				}
+
+				progress.Stage("Encoding %s (%s)...", out, resolvedFormat)
+				progress.ResetFrames()
+
+				enc, err := encoder.New(ffmpegPath, out, composition.FPS, resolvedFormat, encoderOpts)
+				if err != nil {
+					return err
+				}
+				if err := browser.EncodeCachedFrames(composition, enc, framesDir, progress.Frames); err != nil {
+					_ = enc.Close()
+					return err
+				}
+				if err := enc.Close(); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Encoded %s (%d frames, %s) in %s\n", out, composition.TotalFrames, resolvedFormat, time.Since(start).Round(time.Millisecond))
+			}
+
+			if !keepFrames {
+				if err := os.RemoveAll(framesDir); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not remove frames directory %s: %v\n", framesDir, err)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringArrayVarP(&outputs, "output", "o", nil, "output file path; can be specified multiple times for multiple outputs")
+	cmd.Flags().IntVar(&fps, "fps", 0, "override frame rate from config.cetus")
+	cmd.Flags().StringVar(&format, "format", "", "output format: mp4 or webm (defaults from file extension)")
+	cmd.Flags().StringVar(&scale, "scale", "", "scale output resolution: 480p, 720p, 1080p, 4k, or WxH")
+	cmd.Flags().IntVar(&quality, "quality", 0, "encoder CRF quality (0 = codec default)")
+	cmd.Flags().StringVar(&thumbnail, "thumbnail", "", "extract a single frame at this timestamp (e.g. 5s, 1:30, 01:02:30)")
+	cmd.Flags().BoolVar(&keepFrames, "keep-frames", false, "keep the frame cache directory after encoding")
+	cmd.Flags().IntVar(&timeoutSeconds, "timeout", 0, "max encode time in seconds; 0 disables deadline")
+	cmd.Flags().StringVar(&progressFormat, "progress-format", "text", "progress output format: text or json")
 
 	return cmd
 }
@@ -284,6 +458,35 @@ func audioControlFlagsChanged(cmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+func parseTimestamp(s string) (float64, error) {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "s") {
+		if v, err := strconv.ParseFloat(strings.TrimSuffix(s, "s"), 64); err == nil {
+			return v, nil
+		}
+	}
+	if v, err := strconv.ParseFloat(s, 64); err == nil {
+		return v, nil
+	}
+	parts := strings.Split(s, ":")
+	switch len(parts) {
+	case 2:
+		m, errM := strconv.Atoi(parts[0])
+		sec, errS := strconv.ParseFloat(parts[1], 64)
+		if errM == nil && errS == nil {
+			return float64(m)*60 + sec, nil
+		}
+	case 3:
+		h, errH := strconv.Atoi(parts[0])
+		m, errM := strconv.Atoi(parts[1])
+		sec, errS := strconv.ParseFloat(parts[2], 64)
+		if errH == nil && errM == nil && errS == nil {
+			return float64(h)*3600 + float64(m)*60 + sec, nil
+		}
+	}
+	return 0, fmt.Errorf("invalid timestamp %q; use seconds (5s, 1.5), MM:SS, or HH:MM:SS", s)
 }
 
 func newPreviewCommand() *cobra.Command {
