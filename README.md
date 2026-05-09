@@ -30,7 +30,7 @@ cetus render cetus.html -o out.webm
 # Override HTML defaults only when needed
 cetus render cetus.html -o out.mp4 --fps 60
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
-cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
 cetus preview cetus.html
 cetus update check
 cetus update apply
@@ -72,7 +72,8 @@ Long renders can opt into a resumable frame cache with `--resume --frames-dir
 .cetus-frames`. If the render fails, rerun the same command and Cetus reuses
 completed frame PNGs from that directory. `--resume` without `--frames-dir` uses
 `.cetus-frames` in the current directory. Frames are not saved unless
-`--frames-dir` or `--resume` is provided.
+`--frames-dir` or `--resume` is provided. `--concurrency` controls parallel
+browser workers only on this cached-frame path.
 
 ## Composition Format
 

@@ -565,7 +565,7 @@ cetus render cetus.html -o smooth.mp4 --fps 60
 cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-start 2.5 --audio-fade-in 1 --audio-fade-out 2
-cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames</code></pre>
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4</code></pre>
       </div>
     </section>
   </main>
@@ -690,7 +690,7 @@ cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames</code></p
     }
 
     function resumeRenderCommand(htmlFile, outputFile, format, audioPath, controls) {
-      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames`;
+      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames --concurrency 4`;
     }
 
     function cleanFileName(name, fallback) {
@@ -998,7 +998,7 @@ Cetus composition rules:
 - If media elements are used, include data-volume when relevant.
 - For final music or voiceover, use the render command's --audio flag. Do not rely on browser audio playback being captured into the output video.
 - If final audio is requested, include the selected --audio-volume, --audio-loop, --audio-start, --audio-fade-in, and --audio-fade-out flags in render commands when applicable.
-- For long videos, high FPS, 4K output, or fragile environments, include the optional resumable render command with --resume --frames-dir .cetus-frames. Explain that this saves PNG frames only when requested and can use disk space.
+- For long videos, high FPS, 4K output, or fragile environments, include the optional parallel resumable render command with --resume --frames-dir .cetus-frames --concurrency 4. Explain that this saves PNG frames only when requested and can use disk space.
 - Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
 - If GSAP is useful, you may use it, but every GSAP timeline must be paused and registered on window.__timelines so Cetus can seek it.
 - GSAP pattern to follow when GSAP is loaded:

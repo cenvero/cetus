@@ -232,6 +232,7 @@ cetus version</code></pre>
             <tr><td><code>--format</code></td><td><code>mp4</code> or <code>webm</code>. Defaults from output extension.</td></tr>
             <tr><td><code>--audio</code></td><td>Local audio file to mux into the final output.</td></tr>
             <tr><td><code>--resume</code>, <code>--frames-dir</code></td><td>Opt-in resumable frame cache for long renders.</td></tr>
+            <tr><td><code>--concurrency</code></td><td>Parallel browser workers when the frame cache is enabled.</td></tr>
             <tr><td><code>--no-gpu</code></td><td>Disable GPU acceleration for CI, Docker, or headless Linux servers.</td></tr>
           </table>
         </section>
@@ -283,9 +284,9 @@ cetus render cetus.html -o out.webm --audio voiceover.wav --audio-fade-out 1.5</
 cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
 
           <h3>Resume</h3>
-          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frame PNGs and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
-          <pre><code>cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames
-cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames</code></pre>
+          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frame PNGs and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. When the frame cache is enabled, <code>--concurrency</code> controls parallel browser workers. Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
+cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames --concurrency 4</code></pre>
         </section>
 
         <section id="validation">
