@@ -6,8 +6,20 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+type Options struct {
+	AudioPath           string
+	AudioVolume         float64
+	AudioVolumeSet      bool
+	AudioLoop           bool
+	AudioStartSeconds   float64
+	AudioFadeInSeconds  float64
+	AudioFadeOutSeconds float64
+	DurationSeconds     float64
+}
 
 type Encoder struct {
 	cmd    *exec.Cmd
@@ -16,7 +28,7 @@ type Encoder struct {
 	done   chan error
 }
 
-func New(ffmpegPath, output string, fps int, format string) (*Encoder, error) {
+func New(ffmpegPath, output string, fps int, format string, opts Options) (*Encoder, error) {
 	if ffmpegPath == "" {
 		return nil, fmt.Errorf("ffmpeg path is required")
 	}
@@ -33,7 +45,7 @@ func New(ffmpegPath, output string, fps int, format string) (*Encoder, error) {
 	}
 
 	enc := &Encoder{done: make(chan error, 1)}
-	args := buildFFmpegArgs(output, fps, resolvedFormat)
+	args := buildFFmpegArgs(output, fps, resolvedFormat, opts)
 	enc.cmd = exec.Command(ffmpegPath, args...) // #nosec G204 -- ffmpegPath is the configured renderer executable; args are not shell-expanded.
 	enc.cmd.Stderr = &enc.stderr
 
@@ -102,12 +114,25 @@ func ResolveFormat(output, explicit string) (string, error) {
 	}
 }
 
-func buildFFmpegArgs(output string, fps int, format string) []string {
+func buildFFmpegArgs(output string, fps int, format string, opts Options) []string {
 	args := []string{
 		"-f", "image2pipe",
 		"-vcodec", "png",
 		"-r", fmt.Sprintf("%d", fps),
 		"-i", "pipe:0",
+	}
+	audioPath := strings.TrimSpace(opts.AudioPath)
+	hasAudio := audioPath != ""
+	if hasAudio {
+		if opts.AudioLoop {
+			args = append(args, "-stream_loop", "-1")
+		}
+		args = append(args, "-i", audioPath)
+		if filter, ok := buildAudioFilter(opts); ok {
+			args = append(args, "-filter_complex", filter, "-map", "0:v:0", "-map", "[cetus_audio]")
+		} else {
+			args = append(args, "-map", "0:v:0", "-map", "1:a:0?")
+		}
 	}
 
 	switch format {
@@ -118,14 +143,61 @@ func buildFFmpegArgs(output string, fps int, format string) []string {
 			"-b:v", "0",
 			"-crf", "30",
 		)
+		if hasAudio {
+			args = append(args, "-c:a", "libopus", "-b:a", "160k")
+		} else {
+			args = append(args, "-an")
+		}
 	default:
 		args = append(args,
 			"-vcodec", "libx264",
 			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
 		)
+		if hasAudio {
+			args = append(args, "-c:a", "aac", "-b:a", "192k")
+		} else {
+			args = append(args, "-an")
+		}
+		args = append(args, "-movflags", "+faststart")
+	}
+
+	if hasAudio && opts.DurationSeconds > 0 {
+		args = append(args, "-t", strconv.FormatFloat(opts.DurationSeconds, 'f', -1, 64))
 	}
 
 	args = append(args, "-y", output)
 	return args
+}
+
+func buildAudioFilter(opts Options) (string, bool) {
+	var filters []string
+	volume := opts.AudioVolume
+	if !opts.AudioVolumeSet && volume == 0 {
+		volume = 1
+	}
+	if volume != 1 {
+		filters = append(filters, "volume="+formatFilterFloat(volume))
+	}
+	if opts.AudioFadeInSeconds > 0 {
+		filters = append(filters, "afade=t=in:st=0:d="+formatFilterFloat(opts.AudioFadeInSeconds))
+	}
+	if opts.AudioFadeOutSeconds > 0 {
+		fadeStart := opts.DurationSeconds - opts.AudioStartSeconds - opts.AudioFadeOutSeconds
+		if fadeStart < 0 {
+			fadeStart = 0
+		}
+		filters = append(filters, "afade=t=out:st="+formatFilterFloat(fadeStart)+":d="+formatFilterFloat(opts.AudioFadeOutSeconds))
+	}
+	if opts.AudioStartSeconds > 0 {
+		delayMS := int64(opts.AudioStartSeconds*1000 + 0.5)
+		filters = append(filters, "adelay="+strconv.FormatInt(delayMS, 10)+":all=1")
+	}
+	if len(filters) == 0 {
+		return "", false
+	}
+	return "[1:a:0]" + strings.Join(filters, ",") + "[cetus_audio]", true
+}
+
+func formatFilterFloat(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
