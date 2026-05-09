@@ -2,8 +2,14 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/cenvero/cetus/internal/compose"
 	"github.com/cenvero/cetus/internal/encoder"
@@ -21,7 +27,16 @@ type CaptureProgress struct {
 
 type CaptureProgressFunc func(CaptureProgress)
 
+type CaptureOptions struct {
+	FramesDir string
+	Resume    bool
+}
+
 func (b *Browser) Capture(ctx context.Context, composition *compose.Composition, enc *encoder.Encoder, progress CaptureProgressFunc) error {
+	return b.CaptureWithOptions(ctx, composition, enc, progress, CaptureOptions{})
+}
+
+func (b *Browser) CaptureWithOptions(ctx context.Context, composition *compose.Composition, enc *encoder.Encoder, progress CaptureProgressFunc, opts CaptureOptions) error {
 	if b == nil {
 		return fmt.Errorf("browser is nil")
 	}
@@ -30,6 +45,11 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 	}
 	if enc == nil {
 		return fmt.Errorf("encoder is required")
+	}
+
+	cache, err := newFrameCache(opts, composition)
+	if err != nil {
+		return err
 	}
 
 	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
@@ -41,13 +61,24 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 		}
 
 		t := float64(frame) / float64(composition.FPS)
-		if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(frame, composition.FPS), nil, awaitPromise)); err != nil {
-			return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
-		}
-
-		png, err := b.captureFrame(t)
+		png, cached, err := cachedFrame(cache, frame)
 		if err != nil {
-			return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
+			return fmt.Errorf("read cached frame %d: %w", frame, err)
+		}
+		if !cached {
+			if err := chromedp.Run(b.ctx, chromedp.Evaluate(buildSeekScript(frame, composition.FPS), nil, awaitPromise)); err != nil {
+				return fmt.Errorf("seek frame %d at %.6fs: %w", frame, t, err)
+			}
+
+			png, err = b.captureFrame(t)
+			if err != nil {
+				return fmt.Errorf("capture frame %d at %.6fs: %w", frame, t, err)
+			}
+			if cache != nil {
+				if err := cache.write(frame, png); err != nil {
+					return fmt.Errorf("write cached frame %d: %w", frame, err)
+				}
+			}
 		}
 		if err := enc.WriteFrame(png); err != nil {
 			return fmt.Errorf("encode frame %d: %w", frame, err)
@@ -56,6 +87,13 @@ func (b *Browser) Capture(ctx context.Context, composition *compose.Composition,
 	}
 
 	return nil
+}
+
+func cachedFrame(cache *frameCache, frame int) ([]byte, bool, error) {
+	if cache == nil || !cache.resume {
+		return nil, false, nil
+	}
+	return cache.read(frame)
 }
 
 func reportCaptureProgress(progress CaptureProgressFunc, completedFrames, totalFrames int, timeSeconds float64) {
@@ -387,4 +425,184 @@ func buildSeekScript(frame, fps int) string {
   await waitForPaint();
   return true;
 })()`
+}
+
+type frameCache struct {
+	dir    string
+	resume bool
+}
+
+type frameCacheManifest struct {
+	Version       int     `json:"version"`
+	CompositionID string  `json:"composition_id"`
+	Width         int     `json:"width"`
+	Height        int     `json:"height"`
+	FPS           int     `json:"fps"`
+	Duration      float64 `json:"duration"`
+	TotalFrames   int     `json:"total_frames"`
+}
+
+const frameCacheManifestName = "cetus-frames.json"
+
+var frameCacheFilePattern = regexp.MustCompile(`^frame-[0-9]+\.png$`)
+
+func newFrameCache(opts CaptureOptions, composition *compose.Composition) (*frameCache, error) {
+	dir := strings.TrimSpace(opts.FramesDir)
+	if dir == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create frame cache directory: %w", err)
+	}
+
+	expected := manifestForComposition(composition)
+	if opts.Resume {
+		if err := validateExistingFrameCache(dir, expected); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := clearFrameCache(dir); err != nil {
+			return nil, err
+		}
+	}
+	if err := writeFrameCacheManifest(dir, expected); err != nil {
+		return nil, err
+	}
+
+	return &frameCache{dir: dir, resume: opts.Resume}, nil
+}
+
+func manifestForComposition(composition *compose.Composition) frameCacheManifest {
+	return frameCacheManifest{
+		Version:       1,
+		CompositionID: composition.ID,
+		Width:         composition.Width,
+		Height:        composition.Height,
+		FPS:           composition.FPS,
+		Duration:      composition.Duration,
+		TotalFrames:   composition.TotalFrames,
+	}
+}
+
+func validateExistingFrameCache(dir string, expected frameCacheManifest) error {
+	existing, ok, err := readFrameCacheManifest(dir)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		hasFrames, err := hasFrameCacheFiles(dir)
+		if err != nil {
+			return err
+		}
+		if hasFrames {
+			return fmt.Errorf("frame cache manifest is missing; rerun without --resume or use an empty --frames-dir")
+		}
+		return nil
+	}
+	if !sameFrameCacheManifest(existing, expected) {
+		return fmt.Errorf("frame cache manifest does not match this composition; use a different --frames-dir or rerun without --resume")
+	}
+	return nil
+}
+
+func hasFrameCacheFiles(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("read frame cache directory: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && frameCacheFilePattern.MatchString(entry.Name()) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func sameFrameCacheManifest(a, b frameCacheManifest) bool {
+	return a.Version == b.Version &&
+		a.CompositionID == b.CompositionID &&
+		a.Width == b.Width &&
+		a.Height == b.Height &&
+		a.FPS == b.FPS &&
+		a.TotalFrames == b.TotalFrames &&
+		math.Abs(a.Duration-b.Duration) < 0.000001
+}
+
+func readFrameCacheManifest(dir string) (frameCacheManifest, bool, error) {
+	data, err := os.ReadFile(filepath.Join(dir, frameCacheManifestName))
+	if os.IsNotExist(err) {
+		return frameCacheManifest{}, false, nil
+	}
+	if err != nil {
+		return frameCacheManifest{}, false, fmt.Errorf("read frame cache manifest: %w", err)
+	}
+	var manifest frameCacheManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return frameCacheManifest{}, false, fmt.Errorf("parse frame cache manifest: %w", err)
+	}
+	return manifest, true, nil
+}
+
+func writeFrameCacheManifest(dir string, manifest frameCacheManifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode frame cache manifest: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(dir, frameCacheManifestName), data, 0o600); err != nil {
+		return fmt.Errorf("write frame cache manifest: %w", err)
+	}
+	return nil
+}
+
+func clearFrameCache(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read frame cache directory: %w", err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || (name != frameCacheManifestName && !frameCacheFilePattern.MatchString(name)) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove old cached frame %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (c *frameCache) read(frame int) ([]byte, bool, error) {
+	path := c.framePath(frame)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if len(data) == 0 {
+		return nil, false, nil
+	}
+	return data, true, nil
+}
+
+func (c *frameCache) write(frame int, png []byte) error {
+	if len(png) == 0 {
+		return fmt.Errorf("frame PNG is empty")
+	}
+	path := c.framePath(frame)
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, png, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
+func (c *frameCache) framePath(frame int) string {
+	return filepath.Join(c.dir, fmt.Sprintf("frame-%06d.png", frame))
 }
