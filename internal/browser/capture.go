@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -529,7 +528,13 @@ func sameFrameCacheManifest(a, b frameCacheManifest) bool {
 }
 
 func readFrameCacheManifest(dir string) (frameCacheManifest, bool, error) {
-	data, err := os.ReadFile(filepath.Join(dir, frameCacheManifestName))
+	root, err := openFrameCacheRoot(dir)
+	if err != nil {
+		return frameCacheManifest{}, false, err
+	}
+	defer root.Close()
+
+	data, err := root.ReadFile(frameCacheManifestName)
 	if os.IsNotExist(err) {
 		return frameCacheManifest{}, false, nil
 	}
@@ -549,13 +554,25 @@ func writeFrameCacheManifest(dir string, manifest frameCacheManifest) error {
 		return fmt.Errorf("encode frame cache manifest: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(filepath.Join(dir, frameCacheManifestName), data, 0o600); err != nil {
+
+	root, err := openFrameCacheRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.WriteFile(frameCacheManifestName, data, 0o600); err != nil {
 		return fmt.Errorf("write frame cache manifest: %w", err)
 	}
 	return nil
 }
 
 func clearFrameCache(dir string) error {
+	root, err := openFrameCacheRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("read frame cache directory: %w", err)
@@ -565,7 +582,7 @@ func clearFrameCache(dir string) error {
 		if entry.IsDir() || (name != frameCacheManifestName && !frameCacheFilePattern.MatchString(name)) {
 			continue
 		}
-		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+		if err := root.Remove(name); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove old cached frame %q: %w", name, err)
 		}
 	}
@@ -573,8 +590,13 @@ func clearFrameCache(dir string) error {
 }
 
 func (c *frameCache) read(frame int) ([]byte, bool, error) {
-	path := c.framePath(frame)
-	data, err := os.ReadFile(path)
+	root, err := openFrameCacheRoot(c.dir)
+	if err != nil {
+		return nil, false, err
+	}
+	defer root.Close()
+
+	data, err := root.ReadFile(frameFileName(frame))
 	if os.IsNotExist(err) {
 		return nil, false, nil
 	}
@@ -591,18 +613,32 @@ func (c *frameCache) write(frame int, png []byte) error {
 	if len(png) == 0 {
 		return fmt.Errorf("frame PNG is empty")
 	}
-	path := c.framePath(frame)
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, png, 0o600); err != nil {
+	root, err := openFrameCacheRoot(c.dir)
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
+	defer root.Close()
+
+	name := frameFileName(frame)
+	tmpName := name + ".tmp"
+	if err := root.WriteFile(tmpName, png, 0o600); err != nil {
+		return err
+	}
+	if err := root.Rename(tmpName, name); err != nil {
+		_ = root.Remove(tmpName)
 		return err
 	}
 	return nil
 }
 
-func (c *frameCache) framePath(frame int) string {
-	return filepath.Join(c.dir, fmt.Sprintf("frame-%06d.png", frame))
+func openFrameCacheRoot(dir string) (*os.Root, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open frame cache root: %w", err)
+	}
+	return root, nil
+}
+
+func frameFileName(frame int) string {
+	return fmt.Sprintf("frame-%06d.png", frame)
 }
