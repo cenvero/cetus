@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-09T10:34:06Z",
+  "generated_at": "2026-05-09T12:54:36Z",
   "channels": {
     "stable": {
       "version": "v0.5.0",
@@ -12,6 +12,15 @@
         "v0.3.0",
         "v0.2.0",
         "v0.1.0"
+      ]
+    },
+    "beta": {
+      "version": "v0.6.0-beta",
+      "release_date": "2026-05-09T12:54:36Z",
+      "min_supported": "v0.6.0-beta",
+      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.6.0-beta",
+      "history": [
+        "v0.6.0-beta"
       ]
     }
   },
@@ -119,6 +128,32 @@
         "sha256": "4d2fa798d8f9fe805a62ab620202e8d0b11d4fd1b533e6796bfb1ed345377824",
         "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.5.0/cetus_v0.5.0_windows_amd64.zip.minisig",
         "size": 109161966
+      }
+    },
+    "v0.6.0-beta": {
+      "darwin-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_darwin_amd64.tar.gz",
+        "sha256": "b82b99dc22858a1b2cfe56b71392e32ea66095b704a75ce7b8d32fb71447ba13",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_darwin_amd64.tar.gz.minisig",
+        "size": 86546996
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_darwin_arm64.tar.gz",
+        "sha256": "52dba1c121757302d9f3c16f92410f46bed9ab0d364e0d3f9eb52a8bbf500431",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_darwin_arm64.tar.gz.minisig",
+        "size": 76326902
+      },
+      "windows-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_windows_amd64.zip",
+        "sha256": "fb1db661637484ac0fb94a1d1047f727feb94c00e5077213da848893077307a5",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_windows_amd64.zip.minisig",
+        "size": 109179227
+      },
+      "linux-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_linux_amd64.tar.gz",
+        "sha256": "b11539dcfd6a22b1cb00e0c28e317e8a81651b7b40a79da03d85a9cfe76db13f",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.6.0-beta/cetus_v0.6.0-beta_linux_amd64.tar.gz.minisig",
+        "size": 126485341
       }
     }
   }
