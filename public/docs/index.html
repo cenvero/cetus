@@ -301,7 +301,7 @@ cetus render cetus.html -o out.mp4 --scale 1280x720</code></pre>
 cetus render cetus.html -o delivery.mp4 --quality 28</code></pre>
 
           <h3>Resume and Frame Cache</h3>
-          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frames and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. Frames are saved as WebP (lossless-quality, ~30% smaller than PNG). After a successful render, the frame cache is deleted automatically unless <code>--keep-frames</code> is passed. When the frame cache is enabled, <code>--concurrency</code> controls parallel browser workers (default 1). Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
+          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frames and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. Frames are saved as lossless PNG to preserve full quality. After a successful render, the frame cache is deleted automatically unless <code>--keep-frames</code> is passed. When the frame cache is enabled, <code>--concurrency</code> controls parallel browser workers (default 1). Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
           <pre><code>cetus render cetus.html -o out.mp4 --resume
 cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
 cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames
@@ -408,7 +408,7 @@ cetus encode .cetus-frames -o out.mp4 --fps 24</code></pre>
   -> parse data attributes
   -> launch embedded headless browser
   -> seek frame state
-  -> capture WebP frame
+  -> capture PNG frame
   -> pipe frames to embedded ffmpeg
   -> write MP4 or WebM</code></pre>
           <p>On first render, Cetus extracts its embedded browser bundle and ffmpeg into <code>~/.cenvero-cetus/&lt;version&gt;</code>. If the browser bundle is incomplete, Cetus repairs that cache by extracting it again.</p>

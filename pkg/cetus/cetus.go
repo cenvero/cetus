@@ -108,7 +108,7 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		DurationSeconds:     renderDuration,
 		Quality:             opts.Quality,
 		Scale:               scaleFilter,
-		FrameCodec:          "webp",
+		FrameCodec:          "png",
 	}
 	browserOpts := browser.Options{
 		ChromePath: chromePath,

@@ -174,7 +174,7 @@ func newRenderCommand() *cobra.Command {
 				DurationSeconds:     renderDuration,
 				Quality:             quality,
 				Scale:               scaleFilter,
-				FrameCodec:          "webp",
+				FrameCodec:          "png",
 			}
 			browserOpts := browser.Options{
 				ChromePath: chromePath,

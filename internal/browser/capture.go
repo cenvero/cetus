@@ -260,11 +260,11 @@ func CompositionFromCache(dir string) (*compose.Composition, error) {
 	}, nil
 }
 
-// FrameCodecFromCache returns the frame codec stored in config.cetus, defaulting to "webp".
+// FrameCodecFromCache returns the frame codec stored in config.cetus, defaulting to "png".
 func FrameCodecFromCache(dir string) string {
 	manifest, ok, _ := readFrameCacheManifest(dir)
 	if !ok || manifest.FrameFormat == "" {
-		return "webp"
+		return "png"
 	}
 	return manifest.FrameFormat
 }
@@ -351,7 +351,7 @@ func beginFrame(ctx context.Context, t float64) ([]byte, error) {
 	params := map[string]any{
 		"frameTimeTicks": t,
 		"screenshot": map[string]any{
-			"format":  "webp",
+			"format":  "png",
 			"quality": 100,
 		},
 	}
@@ -375,8 +375,7 @@ func captureScreenshot(ctx context.Context) ([]byte, error) {
 	}
 
 	data, err := page.CaptureScreenshot().
-		WithFormat(page.CaptureScreenshotFormatWebp).
-		WithQuality(100).
+		WithFormat(page.CaptureScreenshotFormatPng).
 		WithFromSurface(true).
 		Do(targetCtx)
 	if err != nil {
@@ -667,7 +666,7 @@ type frameCacheManifest struct {
 
 const frameCacheManifestName = "config.cetus"
 
-var frameCacheFilePattern = regexp.MustCompile(`^frame-[0-9]+\.webp$`)
+var frameCacheFilePattern = regexp.MustCompile(`^frame-[0-9]+\.png$`)
 
 func newFrameCache(opts CaptureOptions, composition *compose.Composition) (*frameCache, error) {
 	dir := strings.TrimSpace(opts.FramesDir)
@@ -704,7 +703,7 @@ func manifestForComposition(composition *compose.Composition) frameCacheManifest
 		FPS:           composition.FPS,
 		Duration:      composition.Duration,
 		TotalFrames:   composition.TotalFrames,
-		FrameFormat:   "webp",
+		FrameFormat:   "png",
 	}
 }
 
@@ -828,7 +827,7 @@ func (c *frameCache) read(frame int) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if !isValidWebPData(data) {
+	if !isValidPNGData(data) {
 		return nil, false, nil
 	}
 	return data, true, nil
@@ -865,11 +864,11 @@ func openFrameCacheRoot(dir string) (*os.Root, error) {
 }
 
 func frameFileName(frame int) string {
-	return fmt.Sprintf("frame-%09d.webp", frame)
+	return fmt.Sprintf("frame-%09d.png", frame)
 }
 
-func isValidWebPData(data []byte) bool {
-	return len(data) >= 12 &&
-		data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
-		data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P'
+func isValidPNGData(data []byte) bool {
+	return len(data) >= 8 &&
+		data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' &&
+		data[4] == '\r' && data[5] == '\n' && data[6] == 0x1a && data[7] == '\n'
 }
