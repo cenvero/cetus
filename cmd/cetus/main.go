@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cenvero/cetus/internal/assets"
@@ -31,6 +32,7 @@ func newRootCommand() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.AddCommand(newRenderCommand())
+	root.AddCommand(newValidateCommand())
 	root.AddCommand(newPreviewCommand())
 	root.AddCommand(newUpdateCommand())
 	root.AddCommand(newVersionCommand())
@@ -45,6 +47,14 @@ func newRenderCommand() *cobra.Command {
 	var format string
 	var concurrency int
 	var timeoutSeconds int
+	var audioPath string
+	var audioVolume float64
+	var audioLoop bool
+	var audioStartSeconds float64
+	var audioFadeInSeconds float64
+	var audioFadeOutSeconds float64
+	var framesDir string
+	var resume bool
 	var noGPU bool
 
 	cmd := &cobra.Command{
@@ -58,13 +68,33 @@ func newRenderCommand() *cobra.Command {
 			if concurrency <= 0 {
 				return fmt.Errorf("concurrency must be positive")
 			}
-			if timeoutSeconds <= 0 {
-				return fmt.Errorf("timeout must be positive")
+			if timeoutSeconds < 0 {
+				return fmt.Errorf("timeout must be zero or positive")
+			}
+			if err := validateAudioFlagValues(audioVolume, audioStartSeconds, audioFadeInSeconds, audioFadeOutSeconds); err != nil {
+				return err
+			}
+			framesDir = strings.TrimSpace(framesDir)
+			if resume && framesDir == "" {
+				framesDir = ".cetus-frames"
 			}
 
 			input := args[0]
 			if _, err := os.Stat(input); err != nil {
 				return fmt.Errorf("stat input composition: %w", err)
+			}
+			audioPath = strings.TrimSpace(audioPath)
+			if audioPath == "" && audioControlFlagsChanged(cmd) {
+				return fmt.Errorf("audio controls require --audio")
+			}
+			if audioPath != "" {
+				info, err := os.Stat(audioPath)
+				if err != nil {
+					return fmt.Errorf("stat audio file: %w", err)
+				}
+				if info.IsDir() {
+					return fmt.Errorf("audio path %q is a directory", audioPath)
+				}
 			}
 
 			start := time.Now()
@@ -90,6 +120,10 @@ func newRenderCommand() *cobra.Command {
 			if err := composition.ApplyOverrides(fpsOverride, width, height); err != nil {
 				return err
 			}
+			renderDuration := float64(composition.TotalFrames) / float64(composition.FPS)
+			if audioPath != "" && audioStartSeconds >= renderDuration {
+				return fmt.Errorf("audio start %.3fs must be before render duration %.3fs", audioStartSeconds, renderDuration)
+			}
 			progress.Stage(
 				"Composition %q: %dx%d, %.2fs at %d fps (%d frames, %d clips)",
 				composition.ID,
@@ -106,11 +140,20 @@ func newRenderCommand() *cobra.Command {
 				return err
 			}
 
-			ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(timeoutSeconds)*time.Second)
+			ctx, cancel := renderContext(cmd.Context(), timeoutSeconds)
 			defer cancel()
 
 			progress.Stage("Starting %s encoder...", resolvedFormat)
-			enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat)
+			enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat, encoder.Options{
+				AudioPath:           audioPath,
+				AudioVolume:         audioVolume,
+				AudioVolumeSet:      cmd.Flags().Changed("audio-volume"),
+				AudioLoop:           audioLoop,
+				AudioStartSeconds:   audioStartSeconds,
+				AudioFadeInSeconds:  audioFadeInSeconds,
+				AudioFadeOutSeconds: audioFadeOutSeconds,
+				DurationSeconds:     renderDuration,
+			})
 			if err != nil {
 				return err
 			}
@@ -127,7 +170,17 @@ func newRenderCommand() *cobra.Command {
 			defer b.Close()
 
 			progress.Stage("Starting frame rendering...")
-			if err := b.Capture(ctx, composition, enc, progress.Frames); err != nil {
+			if framesDir != "" {
+				if resume {
+					progress.Stage("Using resumable frame cache at %s...", framesDir)
+				} else {
+					progress.Stage("Saving rendered frames to %s...", framesDir)
+				}
+			}
+			if err := b.CaptureWithOptions(ctx, composition, enc, progress.Frames, browser.CaptureOptions{
+				FramesDir: framesDir,
+				Resume:    resume,
+			}); err != nil {
 				_ = enc.Close()
 				return err
 			}
@@ -147,11 +200,51 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().IntVar(&height, "height", 0, "output height in pixels")
 	cmd.Flags().StringVar(&format, "format", "", "output format: mp4 or webm")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "number of parallel frame capture workers")
-	cmd.Flags().IntVar(&timeoutSeconds, "timeout", 300, "max render time in seconds")
+	cmd.Flags().IntVar(&timeoutSeconds, "timeout", 0, "max render time in seconds; 0 disables the total render deadline")
+	cmd.Flags().StringVar(&audioPath, "audio", "", "audio file to mux into the output")
+	cmd.Flags().Float64Var(&audioVolume, "audio-volume", 1, "audio volume from 0.0 to 1.0")
+	cmd.Flags().BoolVar(&audioLoop, "audio-loop", false, "loop audio until the render duration is reached")
+	cmd.Flags().Float64Var(&audioStartSeconds, "audio-start", 0, "audio start time in seconds on the render timeline")
+	cmd.Flags().Float64Var(&audioFadeInSeconds, "audio-fade-in", 0, "audio fade-in duration in seconds")
+	cmd.Flags().Float64Var(&audioFadeOutSeconds, "audio-fade-out", 0, "audio fade-out duration in seconds")
+	cmd.Flags().StringVar(&framesDir, "frames-dir", "", "directory for cached PNG frames")
+	cmd.Flags().BoolVar(&resume, "resume", false, "reuse existing frames from --frames-dir; defaults to .cetus-frames when no directory is set")
 	cmd.Flags().BoolVar(&noGPU, "no-gpu", false, "disable GPU acceleration")
 	_ = cmd.MarkFlagRequired("output")
 
 	return cmd
+}
+
+func renderContext(parent context.Context, timeoutSeconds int) (context.Context, context.CancelFunc) {
+	if timeoutSeconds > 0 {
+		return context.WithTimeout(parent, time.Duration(timeoutSeconds)*time.Second)
+	}
+	return context.WithCancel(parent)
+}
+
+func validateAudioFlagValues(volume, start, fadeIn, fadeOut float64) error {
+	if volume < 0 || volume > 1 {
+		return fmt.Errorf("audio volume must be between 0.0 and 1.0")
+	}
+	if start < 0 {
+		return fmt.Errorf("audio start must be zero or positive")
+	}
+	if fadeIn < 0 {
+		return fmt.Errorf("audio fade-in must be zero or positive")
+	}
+	if fadeOut < 0 {
+		return fmt.Errorf("audio fade-out must be zero or positive")
+	}
+	return nil
+}
+
+func audioControlFlagsChanged(cmd *cobra.Command) bool {
+	for _, name := range []string{"audio-volume", "audio-loop", "audio-start", "audio-fade-in", "audio-fade-out"} {
+		if cmd.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func newPreviewCommand() *cobra.Command {
