@@ -51,6 +51,7 @@ func EnsureAssetsWithProgress(version string, progress ProgressFunc) (chromePath
 	chromePath, chromeReady := chromeBundleExecutable(chromeDir)
 
 	if chromeReady && executableExists(ffmpegPath) {
+		_ = cleanupOldAssetCaches(version)
 		reportProgress(progress, "Renderer assets ready")
 		return chromePath, ffmpegPath, nil
 	}
@@ -84,6 +85,7 @@ func EnsureAssetsWithProgress(version string, progress ProgressFunc) (chromePath
 		return "", "", fmt.Errorf("mark ffmpeg executable: %w", err)
 	}
 
+	_ = cleanupOldAssetCaches(version)
 	reportProgress(progress, "Renderer assets ready")
 	return chromePath, ffmpegPath, nil
 }
@@ -192,6 +194,18 @@ func extractBrotliTar(data []byte, destDir string) error {
 }
 
 func assetCacheDir(version string) (string, error) {
+	root, err := assetCacheRoot()
+	if err != nil {
+		return "", err
+	}
+	cleanVersion, err := safeAssetCacheVersion(version)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, cleanVersion), nil
+}
+
+func assetCacheRoot() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("locate user home directory: %w", err)
@@ -199,11 +213,51 @@ func assetCacheDir(version string) (string, error) {
 	if home == "" {
 		return "", fmt.Errorf("locate user home directory: empty path")
 	}
+	return filepath.Join(home, ".cenvero-cetus"), nil
+}
+
+func safeAssetCacheVersion(version string) (string, error) {
 	cleanVersion := filepath.Clean(version)
 	if cleanVersion == "." || filepath.IsAbs(cleanVersion) || cleanVersion == ".." || strings.HasPrefix(cleanVersion, ".."+string(os.PathSeparator)) || strings.Contains(cleanVersion, string(os.PathSeparator)) {
 		return "", fmt.Errorf("version %q is not a safe asset cache path segment", version)
 	}
-	return filepath.Join(home, ".cenvero-cetus", cleanVersion), nil
+	return cleanVersion, nil
+}
+
+func cleanupOldAssetCaches(currentVersion string) error {
+	cleanCurrent, err := safeAssetCacheVersion(currentVersion)
+	if err != nil {
+		return err
+	}
+	if cleanCurrent == "dev" {
+		return nil
+	}
+
+	root, err := assetCacheRoot()
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read asset cache directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == cleanCurrent || name == "dev" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
+			return fmt.Errorf("remove old asset cache %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func safeExtractPath(destDir, name string) (string, error) {
