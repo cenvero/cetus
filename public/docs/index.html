@@ -195,6 +195,7 @@
         <a href="#install">Install</a>
         <a href="#commands">Commands</a>
         <a href="#output-controls">Output Controls</a>
+        <a href="#validation">Validation</a>
         <a href="#composition">Composition HTML</a>
         <a href="#clips">Clips</a>
         <a href="#animation">Animation</a>
@@ -214,7 +215,8 @@ curl -fsSL https://cetus.cenvero.org/install-rc | sh</code></pre>
 
         <section id="commands">
           <h2>Commands</h2>
-          <pre><code>cetus render cetus.html -o out.mp4
+          <pre><code>cetus validate cetus.html
+cetus render cetus.html -o out.mp4
 cetus render cetus.html -o out.webm
 cetus preview cetus.html
 cetus update check
@@ -228,6 +230,8 @@ cetus version</code></pre>
             <tr><td><code>--fps</code></td><td>Frames per second. Defaults to the HTML value or 30.</td></tr>
             <tr><td><code>--width</code>, <code>--height</code></td><td>Override composition dimensions.</td></tr>
             <tr><td><code>--format</code></td><td><code>mp4</code> or <code>webm</code>. Defaults from output extension.</td></tr>
+            <tr><td><code>--audio</code></td><td>Local audio file to mux into the final output.</td></tr>
+            <tr><td><code>--resume</code>, <code>--frames-dir</code></td><td>Opt-in resumable frame cache for long renders.</td></tr>
             <tr><td><code>--no-gpu</code></td><td>Disable GPU acceleration for CI, Docker, or headless Linux servers.</td></tr>
           </table>
         </section>
@@ -266,10 +270,29 @@ cetus render cetus.html -o square.mp4 --width 1080 --height 1080</code></pre>
 cetus render cetus.html -o out.webm
 cetus render cetus.html -o out.video --format mp4</code></pre>
 
+          <h3>Audio</h3>
+          <p>Use <code>--audio</code> to mux a local music, voiceover, or sound-bed file into the final render. MP4 outputs use AAC audio. WebM outputs use Opus audio. Audio controls apply to the final muxed track, not browser playback.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --audio music.mp3
+cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
+cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-start 2.5 --audio-fade-in 1 --audio-fade-out 2
+cetus render cetus.html -o out.webm --audio voiceover.wav --audio-fade-out 1.5</code></pre>
+
           <h3>Timeout and GPU</h3>
-          <p><code>--timeout</code> sets the maximum render time in seconds. GPU stays enabled by default for WebGL, Three.js, and shader animations. Use <code>--no-gpu</code> on CI, Docker, or headless Linux servers where GPU drivers are not available.</p>
+          <p>Cetus has no total render deadline by default. <code>--timeout</code> sets an optional maximum render time in seconds, and <code>--timeout 0</code> disables that deadline. GPU stays enabled by default for WebGL, Three.js, and shader animations. Use <code>--no-gpu</code> on CI, Docker, or headless Linux servers where GPU drivers are not available.</p>
           <pre><code>cetus render cetus.html -o out.mp4 --timeout 600
 cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
+
+          <h3>Resume</h3>
+          <p>Use <code>--resume</code> with <code>--frames-dir</code> for long renders where you want Cetus to save frame PNGs and reuse completed frames after a failure. If <code>--resume</code> is used without <code>--frames-dir</code>, Cetus uses <code>.cetus-frames</code> in the current directory. Without these flags, frames are streamed directly to the encoder and are not kept on disk.</p>
+          <pre><code>cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames
+cetus render cetus.html -o out.mp4 --frames-dir renders/intro-frames</code></pre>
+        </section>
+
+        <section id="validation">
+          <h2>Validation</h2>
+          <p>Run <code>cetus validate</code> before long renders to catch common composition problems without opening Chrome.</p>
+          <pre><code>cetus validate cetus.html</code></pre>
+          <p>The validator checks composition metadata, clip timing, missing local assets, unsupported URL schemes, remote URLs that can make renders non-deterministic, obvious inline pixel positioning outside the frame, and GSAP timelines that are not paused and registered on <code>window.__timelines</code>.</p>
         </section>
 
         <section id="composition">
@@ -318,7 +341,7 @@ cetus render cetus.html -o out.mp4 --no-gpu</code></pre>
 
         <section id="animation">
           <h2>Animation</h2>
-          <p>CSS animations, Web Animations, GSAP, video, audio, WebGL, Three.js, and normal browser APIs can run inside a composition. Cetus seeks CSS and Web Animations automatically. GSAP timelines should be paused and registered on <code>window.__timelines</code>.</p>
+          <p>CSS animations, Web Animations, GSAP, video, audio, WebGL, Three.js, and normal browser APIs can run inside a composition. Cetus seeks CSS and Web Animations automatically. Browser audio can drive visual timing, but final output audio should be added with <code>--audio</code>. GSAP timelines should be paused and registered on <code>window.__timelines</code>.</p>
           <pre><code>&lt;script&gt;
   window.__timelines = window.__timelines || [];
   const tl = gsap.timeline({ paused: true });
