@@ -17,7 +17,6 @@ try {
   $Version = $ChannelInfo.version
   if (-not $Version) { throw "no $Channel Cetus release is published yet" }
 
-  if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne "X64") { throw "unsupported architecture: only windows-amd64 is supported" }
   $Platform = "windows-amd64"
   $Binary = $Manifest.binaries.$Version.$Platform
   if (-not $Binary) { throw "manifest does not contain a binary for $Platform" }

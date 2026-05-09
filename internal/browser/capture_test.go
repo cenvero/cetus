@@ -23,7 +23,8 @@ func TestFrameCacheWritesReadsAndValidatesManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newFrameCache returned error: %v", err)
 	}
-	if err := cache.write(3, []byte("png")); err != nil {
+	pngData := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	if err := cache.write(3, pngData); err != nil {
 		t.Fatalf("write returned error: %v", err)
 	}
 
@@ -35,8 +36,8 @@ func TestFrameCacheWritesReadsAndValidatesManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read returned error: %v", err)
 	}
-	if !ok || string(got) != "png" {
-		t.Fatalf("cached frame = %q, %v; want png, true", string(got), ok)
+	if !ok || string(got) != string(pngData) {
+		t.Fatalf("cached frame = %q, %v; want valid PNG data, true", string(got), ok)
 	}
 
 	mismatched := *comp
