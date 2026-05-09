@@ -93,6 +93,54 @@ func TestAssetCacheDirRejectsUnsafeVersion(t *testing.T) {
 	}
 }
 
+func TestCleanupOldAssetCachesKeepsCurrentAndDev(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, ".cenvero-cetus")
+	for _, name := range []string{"0.3.0", "0.4.0", "dev"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatalf("create cache dir %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write cache file: %v", err)
+	}
+
+	if err := cleanupOldAssetCaches("0.4.0"); err != nil {
+		t.Fatalf("cleanupOldAssetCaches returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "0.4.0")); err != nil {
+		t.Fatalf("current cache was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dev")); err != nil {
+		t.Fatalf("dev cache was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "manifest.json")); err != nil {
+		t.Fatalf("cache file was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "0.3.0")); !os.IsNotExist(err) {
+		t.Fatalf("old cache still exists, stat error: %v", err)
+	}
+}
+
+func TestCleanupOldAssetCachesSkipsDevBuild(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	oldCache := filepath.Join(home, ".cenvero-cetus", "0.3.0")
+	if err := os.MkdirAll(oldCache, 0o700); err != nil {
+		t.Fatalf("create old cache dir: %v", err)
+	}
+
+	if err := cleanupOldAssetCaches("dev"); err != nil {
+		t.Fatalf("cleanupOldAssetCaches returned error: %v", err)
+	}
+
+	if _, err := os.Stat(oldCache); err != nil {
+		t.Fatalf("dev cleanup removed release cache: %v", err)
+	}
+}
+
 func TestHeaderModeUsesTarPermissions(t *testing.T) {
 	got := headerMode(&tar.Header{Mode: 0o100755}, 0o600)
 	if got != 0o755 {
