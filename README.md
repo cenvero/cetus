@@ -4,6 +4,8 @@ Cetus is a self-contained CLI tool that renders HTML compositions into video fil
 It ships a platform-specific headless browser and static ffmpeg binary inside one
 Go executable, extracts them once into `~/.cenvero-cetus`, and renders frames
 deterministically through Chrome DevTools Protocol.
+Release builds keep the current version cache and `dev`, and remove older
+versioned renderer caches during asset preparation.
 
 ## Install
 
@@ -21,11 +23,14 @@ curl -fsSL https://cetus.cenvero.org/install-rc | sh
 ## Usage
 
 ```sh
+cetus validate cetus.html
 cetus render cetus.html -o out.mp4
 cetus render cetus.html -o out.webm
 
 # Override HTML defaults only when needed
 cetus render cetus.html -o out.mp4 --fps 60
+cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
+cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames
 cetus preview cetus.html
 cetus update check
 cetus update apply
@@ -52,6 +57,22 @@ brew update && brew upgrade cenvero-cetus
 `--no-gpu` disables GPU acceleration. GPU remains enabled by default so WebGL,
 Three.js, and shader-based compositions work on platforms with usable graphics
 drivers.
+
+`cetus validate cetus.html` runs a static preflight check for composition
+metadata, clip timing, missing local assets, remote URLs, obvious inline
+out-of-frame positioning, and GSAP timelines that are not paused and registered.
+
+`--audio path/to/music.mp3` muxes a local audio file into the final output. MP4
+outputs encode audio as AAC, and WebM outputs encode audio as Opus. Audio can be
+adjusted with `--audio-volume`, `--audio-loop`, `--audio-start`,
+`--audio-fade-in`, and `--audio-fade-out`. By default Cetus does not set a total
+render deadline; pass `--timeout 600` only when you want a hard cap in seconds.
+
+Long renders can opt into a resumable frame cache with `--resume --frames-dir
+.cetus-frames`. If the render fails, rerun the same command and Cetus reuses
+completed frame PNGs from that directory. `--resume` without `--frames-dir` uses
+`.cetus-frames` in the current directory. Frames are not saved unless
+`--frames-dir` or `--resume` is provided.
 
 ## Composition Format
 
