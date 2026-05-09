@@ -514,6 +514,38 @@
 
     <section class="band">
       <div class="wrap">
+        <h2>How the Seek Engine Works</h2>
+        <div class="controls">
+          <article class="control">
+            <h3>GSAP Timeline Duration</h3>
+            <p>Cetus calls <code>tl.seek(cetusTime, false)</code> on every timeline in <code>window.__timelines</code>. If the timeline's <code>duration()</code> is shorter than the composition, GSAP clamps at the end and all later frames show the same frozen state. Always add <code>tl.set({}, {}, compositionDuration)</code> as the last line before pushing — this forces the timeline to the correct length.</p>
+          </article>
+          <article class="control">
+            <h3>Clip Visibility and Overlays</h3>
+            <p>Cetus sets <code>.clip</code> elements to <code>display:none</code> outside their active time window — not <code>opacity:0</code> or <code>visibility:hidden</code>. Apply GSAP opacity tweens only to child elements inside the clip. An overlay that starts at <code>opacity:1</code> for a fade-in effect will make <code>cetus preview</code> appear black — that is expected. The overlay is cleared at render time by <code>window.__cetusRenderFrame</code>.</p>
+          </article>
+          <article class="control">
+            <h3>Preview vs Render</h3>
+            <p><code>cetus preview</code> serves the HTML with live reload but does <strong>not</strong> run the seek engine. GSAP timelines stay paused, <code>__cetusRenderFrame</code> is never called, and no clips are hidden. Preview shows the initial t=0 CSS state only — use it for layout checks. To test a specific time, open the browser console during preview and call <code>window.__cetusRenderFrame(2.5, {time:2.5, frame:75, fps:30})</code>.</p>
+          </article>
+          <article class="control">
+            <h3>__cetusRenderFrame Hook</h3>
+            <p>Define <code>window.__cetusRenderFrame = async function(time, detail) { ... }</code> for canvas, WebGL, Three.js, or any custom draw loop. Cetus calls it every frame before taking the screenshot. The hook must render the <strong>full</strong> visual state for the given <code>time</code> — not a delta from the previous frame. For Three.js always call <code>renderer.render(scene, camera)</code> explicitly inside the hook.</p>
+          </article>
+          <article class="control">
+            <h3>Frame Capture Order</h3>
+            <p>Each frame: (1) <code>seekTimelines()</code>, (2) <code>__cetusRenderFrame</code> awaited, (3) <code>seekTimelines()</code> again, (4) clip <code>display:none</code> applied, (5) font and media waits, (6) two <code>requestAnimationFrame</code> cycles, (7) screenshot. Changes made in <code>__cetusRenderFrame</code> are captured. If a hook throws, the DOM is not updated for that frame.</p>
+          </article>
+          <article class="control">
+            <h3>window.__timelines Format</h3>
+            <p>Push the plain GSAP timeline object directly: <code>window.__timelines.push(tl)</code>. Do not use <code>{ timeline: tl, offset: N }</code> or any wrapper — Cetus checks for <code>timeline.seek</code> on the object itself. You can also use <code>window.__cetusFrameCallbacks</code> (array of functions) or <code>window.__cetusSeek</code> (single function) as alternative hooks alongside or instead of <code>window.__timelines</code>.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
         <h2>Assistant Workflows</h2>
         <div class="controls">
           <article class="control">
@@ -586,7 +618,7 @@ cetus render cetus.html -o out-4k.mp4 --scale 4k
 cetus render cetus.html -o archive.mp4 --quality 18
 cetus render cetus.html -o delivery.mp4 --quality 28
 
-# Resumable long render — frames saved as WebP, deleted after success
+# Resumable long render — PNG frames saved, auto-deleted after success
 cetus render cetus.html -o out.mp4 --resume --frames-dir .cetus-frames --concurrency 4
 
 # Keep frames and re-encode into multiple resolutions
@@ -1027,7 +1059,7 @@ Cetus composition rules:
 - If media elements are used, include data-volume when relevant.
 - For final music or voiceover, use the render command's --audio flag. Do not rely on browser audio playback being captured into the output video.
 - If final audio is requested, include the selected --audio-volume, --audio-loop, --audio-start, --audio-fade-in, and --audio-fade-out flags in render commands when applicable.
-- For long videos, high FPS, 4K output, or fragile environments, include the optional resumable render command with --resume --frames-dir .cetus-frames. Explain that this saves WebP frames while rendering, auto-deletes them after a successful render, and can be resumed if interrupted. Add --concurrency N only if the user explicitly wants parallel workers. Add --keep-frames only if the user wants to re-encode or extract thumbnails from the cache later.
+- For long videos, high FPS, 4K output, or fragile environments, include the optional resumable render command with --resume --frames-dir .cetus-frames. Explain that this saves lossless PNG frames to disk while rendering, auto-deletes the frame directory after a successful render, and can be resumed if interrupted. Add --concurrency N only if the user explicitly wants parallel workers. Add --keep-frames only if the user wants to re-encode or extract thumbnails from the cache later.
 - If the user wants higher quality output, suggest --quality 18 (or lower) for the render and use cetus encode to produce scaled-down delivery copies from the frame cache.
 - If the user wants multiple output resolutions, suggest rendering once with --keep-frames, then running cetus encode .cetus-frames -o full.mp4 -o preview.mp4 --scale 480p for the variants.
 - Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
@@ -1036,12 +1068,36 @@ Cetus composition rules:
   <script>
     window.__timelines = window.__timelines || [];
     const tl = gsap.timeline({ paused: true });
-    tl.from("#title", { opacity: 0, duration: 0.6 });
+    // Add all tweens using absolute positions.
+    tl.from("#title", { opacity: 0, duration: 0.6 }, 0);
+    tl.from("#subtitle", { opacity: 0, y: 30, duration: 0.5 }, 0.8);
+    // CRITICAL: extend the timeline to the full composition duration.
+    // If the last tween ends before ${duration}s, Cetus's seek() clamps
+    // at the timeline end and all later frames show a frozen wrong state.
+    tl.set({}, {}, ${duration});
     window.__timelines.push(tl);
   <\/script>
+- GSAP timeline rules — read every rule:
+  - Cetus calls tl.seek(cetusTime, false) on each timeline in window.__timelines. The second arg false suppresses GSAP callbacks.
+  - The timeline's total duration() MUST equal or exceed the composition duration (${duration}s). If the last tween ends at e.g. 5s and the composition is ${duration}s, every frame after 5s shows the same frozen end state.
+  - Always add tl.set({}, {}, ${duration}) as the very last line before window.__timelines.push(tl). This is a zero-duration no-op that forces the timeline to exactly ${duration}s.
+  - Push only the plain GSAP timeline object. Do NOT use { timeline: tl, offset: N } or any wrapper — Cetus expects timeline.seek to exist directly on the object.
+  - One master timeline covering all ${duration}s is safer and simpler than many short timelines. Each registered timeline gets seeked independently, so mismatched durations cause different problems per timeline.
+  - Keep every timeline paused: gsap.timeline({ paused: true }). Cetus seeks each frame manually.
 - Do not drive visual timing from Date.now(), performance.now(), setInterval(), autoplay, or unbounded requestAnimationFrame loops.
 - For canvas, WebGL, Three.js, particle systems, or custom JavaScript animation, render from Cetus time by defining window.__cetusRenderFrame = async function(time, detail) { ... } or by adding callbacks to window.__cetusFrameCallbacks. The detail object contains frame and fps.
-- Custom render hooks must draw the full visual state for the supplied time. Do not depend on elapsed wall-clock time between frames.
+- Custom render hooks must draw the full visual state for the given time value. Do not depend on elapsed wall-clock time or delta between frames. For Three.js or WebGL, always call renderer.render(scene, camera) explicitly at the end of __cetusRenderFrame — do not rely on requestAnimationFrame to trigger it.
+- Cetus seek order every frame (important for overlay and animation timing):
+  1. seekTimelines() — all window.__timelines are seeked to cetusTime
+  2. runFrameHooks() — __cetusRenderFrame and __cetusFrameCallbacks are called and awaited
+  3. seekTimelines() — timelines are seeked again in case hooks changed state
+  4. Clip visibility — .clip elements outside their time window are set to display:none
+  5. Font and media waits
+  6. waitForPaint — two requestAnimationFrame cycles
+  7. Screenshot is taken
+  __cetusRenderFrame runs BEFORE the screenshot. Changes it makes to the DOM are captured.
+- Clip visibility rule: Cetus sets .clip elements to display:none when cetusTime is before data-start or at/after data-start+data-duration. It uses display:none, NOT opacity or visibility. Do not set opacity:0 on the .clip element itself — set opacity only on child elements inside the clip so it does not conflict with Cetus's display toggle and GSAP opacity tweens.
+- cetus preview does NOT run the seek engine. It serves the HTML file with live reload injected. GSAP timelines are paused, __cetusRenderFrame is never called, and clip display:none is never applied. Preview shows only the initial t=0 CSS state. If an overlay element starts at opacity:1 in CSS for a fade-in-from-black effect, preview will appear fully black — that is correct and expected. To check a specific frame, open the browser console during preview and call window.__cetusRenderFrame(timeInSeconds, {time:timeInSeconds, frame:frameNumber, fps:${fps}}) manually.
 - Avoid external dependencies unless they are necessary and explicitly loaded in the HTML. Prefer self-contained CSS/Web Animations for robust renders.
 - Do not require Node.js, npm, React, Vite, or a build step.
 - Prefer local asset paths for files I provide.
