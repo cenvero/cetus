@@ -750,8 +750,15 @@ cetus encode .cetus-frames --thumbnail 5s -o thumb.png</code></pre>
       return `cetus render ${htmlFile} -o ${outputFile}${flag}${audioFlags(audioPath, controls)} --fps ${fps} ${commandSize}`;
     }
 
-    function resumeRenderCommand(htmlFile, outputFile, format, audioPath, controls) {
-      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --resume --frames-dir .cetus-frames`;
+    function concurrencyFlag(frameCount) {
+      if (frameCount >= 600) {
+        return " --concurrency 2";
+      }
+      return "";
+    }
+
+    function resumeRenderCommand(htmlFile, outputFile, format, audioPath, controls, frameCount) {
+      return `${renderCommand(htmlFile, outputFile, format, audioPath, controls)} --frames-dir .cetus-frames${concurrencyFlag(frameCount)} --resume`;
     }
 
     function cleanFileName(name, fallback) {
@@ -975,7 +982,7 @@ ${overrideCommand}`;
       const validateCommand = `cetus validate ${htmlFile}`;
       const primaryCommand = renderCommand(htmlFile, outputFile, format, audioPath, audioControls);
       const overrideCommand = overrideRenderCommand(htmlFile, outputFile, format, fps, commandSize, audioPath, audioControls);
-      const resumeCommand = resumeRenderCommand(htmlFile, outputFile, format, audioPath, audioControls);
+      const resumeCommand = resumeRenderCommand(htmlFile, outputFile, format, audioPath, audioControls, frameCount);
 
       return `You are helping me build a video with Cetus.
 
@@ -1059,7 +1066,7 @@ Cetus composition rules:
 - If media elements are used, include data-volume when relevant.
 - For final music or voiceover, use the render command's --audio flag. Do not rely on browser audio playback being captured into the output video.
 - If final audio is requested, include the selected --audio-volume, --audio-loop, --audio-start, --audio-fade-in, and --audio-fade-out flags in render commands when applicable.
-- For long videos, high FPS, 4K output, or fragile environments, always include the resumable render command. See the "When to always use --frames-dir" and "Concurrency guide" sections in this prompt for exact thresholds and values. Only add --concurrency N when machine specs justify it — default is 1. Only add --keep-frames when the user wants to re-encode or extract thumbnails afterward.
+- For long videos, high FPS, 4K output, or fragile environments, always include the resumable render command. The resumable render command in this prompt already includes --concurrency 2 when the frame count is 600 or more. See the "Concurrency guide" section for upgrade advice if the user has a powerful machine. Only add --keep-frames when the user wants to re-encode or extract thumbnails afterward.
 - If the user wants higher quality output, suggest --quality 18 (or lower) for the render and use cetus encode to produce scaled-down delivery copies from the frame cache.
 - If the user wants multiple output resolutions, suggest rendering once with --keep-frames, then running cetus encode .cetus-frames -o full.mp4 -o preview.mp4 --scale 480p for the variants.
 - Use CSS for layout and animation when possible. Cetus seeks CSS/Web Animations to composition time for each captured frame.
@@ -1146,20 +1153,28 @@ cetus render ${htmlFile} -o ${outputFile}
 
 cetus encode .cetus-frames -o out.mp4
   What it does: Re-encodes an existing frame directory into video without opening Chrome again. Reads the composition settings from the config.cetus manifest written by cetus render --frames-dir.
-  When to use: After a render with --keep-frames when you want a second resolution, a second format, different audio, or a thumbnail — without paying the cost of re-rendering all frames.
+  When to use: After a render with --keep-frames when you want a second resolution, a second format, add or change audio, or extract a thumbnail — all without re-rendering frames.
   Flags:
-    -o out.mp4            Required. Output file. Repeat for multiple outputs: -o full.mp4 -o preview-720p.mp4 --scale 720p
-    --scale 480p|720p|1080p|4k|WxH   Downscale the output.
-    --quality 0–51        CRF quality.
+    -o out.mp4            Required. Output file path. Repeat for multiple outputs in one command: -o a.mp4 -o b.webm
+    --scale 480p|720p|1080p|4k|WxH   Resize the output. Each -o can have its own --scale.
+    --quality 0–51        CRF quality (same scale as cetus render --quality).
     --fps N               Override the FPS stored in config.cetus.
-    --audio path          Add an audio track (mp3, wav, m4a, aac, flac, ogg, opus). Mixed in by ffmpeg at encode time.
-    --audio-volume 0–1    Audio loudness. 1.0 = original. Requires --audio.
-    --audio-loop          Loop audio if it is shorter than the video. Requires --audio.
+    --format mp4|webm     Set format when the file extension is ambiguous.
+    --audio path          Add an audio track (mp3, wav, m4a, aac, flac, ogg, opus). Applies to all -o outputs.
+    --audio-volume 0–1    Audio loudness. 1.0 = original level. Requires --audio.
+    --audio-loop          Loop the audio file if it ends before the video. Requires --audio.
     --audio-start N       Start offset into the audio file in seconds. Requires --audio.
-    --audio-fade-in N     Fade audio in over N seconds. Requires --audio.
-    --audio-fade-out N    Fade audio out over the last N seconds. Requires --audio.
-    --thumbnail Ns        Extract a single PNG still from the frame cache at time Ns (e.g. --thumbnail 5s). Produces a PNG, not a video.
-    --format mp4|webm     Set format when the extension is ambiguous.
+    --audio-fade-in N     Fade audio in over N seconds from the start. Requires --audio.
+    --audio-fade-out N    Fade audio out over the last N seconds of the video. Requires --audio.
+    --thumbnail Ns        Extract a single PNG still at time Ns (e.g. --thumbnail 5s, --thumbnail 1:30). Produces a PNG, not a video. Can be combined with -o to name the output.
+    --keep-frames         Keep the frame directory after encoding (do not auto-delete).
+    --timeout N           Hard time limit in seconds for the encode.
+    --progress-format text|json   Progress output format.
+  Examples:
+    cetus encode .cetus-frames -o out.mp4 --audio track.mp3 --audio-volume 0.7
+    cetus encode .cetus-frames -o out.mp4 --audio music.mp3 --audio-fade-in 1 --audio-fade-out 2 --audio-loop
+    cetus encode .cetus-frames -o full.mp4 -o preview.mp4 --scale 720p --quality 28
+    cetus encode .cetus-frames --thumbnail 5s -o thumb.png
 
 Resume workflow — how to recover from an interrupted render:
   A resumable render saves every captured PNG frame to disk as it goes. If the render crashes, is killed, runs out of time, or is interrupted, all captured frames are preserved in the --frames-dir. Re-running with --resume skips those frames and captures only the remaining ones, then encodes the complete video.
@@ -1192,22 +1207,19 @@ When to always use --frames-dir (make this a default recommendation for these ca
   For short compositions (under 30s at 30fps), a direct render without --frames-dir is fine.
 
 Concurrency guide — when and how to use --concurrency:
-  Default is 1 Chrome instance. This is safe on any machine and is the correct starting point.
-  --concurrency requires --frames-dir. It cannot be used without it.
-  Adding workers speeds up frame capture by running multiple Chrome instances in parallel. Each instance uses 300–600 MB of RAM and a full CPU core, so do not over-provision.
-  When to add --concurrency:
-    - The render has 600 or more frames (e.g. 30s at 30fps, or 10s at 60fps)
-    - The machine has enough RAM and CPU cores to spare
-  Recommended values by machine:
-    --concurrency 2   Safe on most laptops with 8 GB+ RAM
-    --concurrency 4   Good on desktop machines or cloud CI runners with 16 GB+ RAM
-    --concurrency 8   Only for powerful workstations or large cloud instances with 32 GB+ RAM
-  Do not set --concurrency higher than the number of available CPU cores.
-  If the machine specs are unknown, do not include --concurrency — the default of 1 is always safe.
-  Example resumable command with 4 workers:
-    cetus render ${htmlFile} -o ${outputFile} --frames-dir .cetus-frames --concurrency 4
-  To resume it after an interruption:
-    cetus render ${htmlFile} -o ${outputFile} --frames-dir .cetus-frames --concurrency 4 --resume
+  Default is 1 Chrome instance. --concurrency requires --frames-dir. It cannot be used without it.
+  Adding workers runs multiple Chrome instances in parallel. Each instance uses 300–600 MB of RAM and one CPU core.
+
+  This composition has ${frameCount} frames. Apply the rule below:
+    ${frameCount >= 3600 ? `${frameCount} frames is a large render. The resumable render command already includes --concurrency 2. If the user has a powerful machine (16 GB+ RAM), recommend upgrading to --concurrency 4.` : frameCount >= 600 ? `${frameCount} frames qualifies for parallel rendering. The resumable render command already includes --concurrency 2, which is safe on most machines. If the user explicitly mentions a powerful machine, recommend --concurrency 4.` : `${frameCount} frames is a short render. --concurrency is not needed. Omit it from all commands.`}
+
+  Recommended values by machine type (use these when recommending upgrades):
+    --concurrency 2   Safe on most laptops with 8 GB+ RAM — always a safe starting point for 600+ frames
+    --concurrency 4   Good on desktops and CI runners with 16 GB+ RAM
+    --concurrency 8   Only for powerful workstations with 32 GB+ RAM
+  Never set --concurrency higher than the number of available CPU cores.
+  Always include --concurrency on the resume command too — same value as the initial render:
+    cetus render ${htmlFile} -o ${outputFile} --frames-dir .cetus-frames --concurrency 2 --resume
 
 Quality and resolution guide — how to control output quality and produce 4K:
 
