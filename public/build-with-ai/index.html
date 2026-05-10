@@ -1152,8 +1152,12 @@ cetus encode .cetus-frames -o out.mp4
     --scale 480p|720p|1080p|4k|WxH   Downscale the output.
     --quality 0–51        CRF quality.
     --fps N               Override the FPS stored in config.cetus.
-    --audio path          Add or change the audio track.
-    --audio-volume, --audio-loop, --audio-start, --audio-fade-in, --audio-fade-out   Same as cetus render audio flags.
+    --audio path          Add an audio track (mp3, wav, m4a, aac, flac, ogg, opus). Mixed in by ffmpeg at encode time.
+    --audio-volume 0–1    Audio loudness. 1.0 = original. Requires --audio.
+    --audio-loop          Loop audio if it is shorter than the video. Requires --audio.
+    --audio-start N       Start offset into the audio file in seconds. Requires --audio.
+    --audio-fade-in N     Fade audio in over N seconds. Requires --audio.
+    --audio-fade-out N    Fade audio out over the last N seconds. Requires --audio.
     --thumbnail Ns        Extract a single PNG still from the frame cache at time Ns (e.g. --thumbnail 5s). Produces a PNG, not a video.
     --format mp4|webm     Set format when the extension is ambiguous.
 
@@ -1204,6 +1208,54 @@ Concurrency guide — when and how to use --concurrency:
     cetus render ${htmlFile} -o ${outputFile} --frames-dir .cetus-frames --concurrency 4
   To resume it after an interruption:
     cetus render ${htmlFile} -o ${outputFile} --frames-dir .cetus-frames --concurrency 4 --resume
+
+Quality and resolution guide — how to control output quality and produce 4K:
+
+What --quality controls:
+  --quality sets the CRF (Constant Rate Factor) for the video encoder. It is a single number that controls the trade-off between file size and visual fidelity.
+  - For MP4 (H.264): CRF range is 0–51. Lower = better quality and larger file. Higher = smaller file and more compression artifacts.
+  - For WebM (VP9): same scale, same direction.
+  - 0 means the codec picks its default (typically around CRF 23 for H.264). This is fine for most cases.
+  - The encoded video is derived from lossless PNG frames, so the only quality loss is from this CRF step.
+
+Quality reference table:
+  --quality 0     Codec default (~CRF 23 for H.264). Good for most web and social videos.
+  --quality 18    High quality. Visually near-lossless. Recommended for archival, client delivery, or source masters. File is larger.
+  --quality 15    Very high quality. Noticeably larger file. Use when you need maximum fidelity for post-production.
+  --quality 23    Balanced. Same as codec default. Good starting point.
+  --quality 28    Smaller file. Visible quality reduction at high motion. Use for preview or upload-optimized delivery.
+  --quality 35+   Heavy compression. Use only for thumbnail previews or very large videos where size matters more than quality.
+
+What 4K means in Cetus:
+  4K means the output video is 3840x2160 pixels (UHD 4K). Set this in the HTML root attributes:
+    data-width="3840" data-height="2160"
+  Chrome renders at exactly this size. Every frame is captured at 3840x2160 PNG. The encoder produces a 3840x2160 video.
+  4K is also available as a --scale shortcut at encode time: --scale 4k (scales up or down to 3840x2160 height).
+  Other size shortcuts: --scale 480p (height 480), --scale 720p (height 720), --scale 1080p (height 1080), --scale 4k (height 2160). Width is always calculated to preserve the aspect ratio.
+  Custom size: --scale 1280x720 (exact WxH).
+
+How to produce the highest possible quality output — full workflow:
+  Step 1: Set the composition to native resolution (e.g. data-width="1920" data-height="1080" or 3840x2160 for 4K).
+  Step 2: Render with --quality 18, --frames-dir, and --keep-frames so the PNG frames are preserved:
+    cetus render ${htmlFile} -o master.mp4 --quality 18 --frames-dir .cetus-frames --keep-frames
+  Step 3: From the same PNG frames, produce scaled delivery copies without re-rendering:
+    cetus encode .cetus-frames -o delivery-1080p.mp4 --scale 1080p --quality 23
+    cetus encode .cetus-frames -o delivery-720p.mp4 --scale 720p --quality 23
+    cetus encode .cetus-frames -o preview-480p.mp4 --scale 480p --quality 28
+    cetus encode .cetus-frames --thumbnail 3s -o thumbnail.png
+  This workflow renders once at full quality and produces every delivery size from the same PNG source. No quality is lost in re-rendering.
+
+When to recommend each quality setting:
+  - User asks for "best quality" or "archive quality": use --quality 18
+  - User asks for "4K": set data-width="3840" data-height="2160" in HTML root AND use --quality 18
+  - User asks for "multiple resolutions": render once with --quality 18 --keep-frames, then cetus encode for each variant
+  - User asks for "smaller file" or "upload-optimized": use --quality 28
+  - User just wants a standard render without quality concerns: omit --quality (codec default is fine)
+  - User asks for "highest possible quality": follow the full 3-step workflow above
+
+4K render cost:
+  A 4K render at 30fps takes significantly longer than 1080p because Chrome renders at 4x the pixel count per frame. Always use --frames-dir with 4K renders so progress is preserved. Recommend --concurrency 2 or higher if the machine supports it:
+    cetus render ${htmlFile} -o out-4k.mp4 --quality 18 --frames-dir .cetus-frames --keep-frames --concurrency 2
 
 FPS control:
 - Cetus renders time as frameNumber / fps.

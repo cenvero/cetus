@@ -272,7 +272,7 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().Float64Var(&audioStartSeconds, "audio-start", 0, "audio start time in seconds on the render timeline")
 	cmd.Flags().Float64Var(&audioFadeInSeconds, "audio-fade-in", 0, "audio fade-in duration in seconds")
 	cmd.Flags().Float64Var(&audioFadeOutSeconds, "audio-fade-out", 0, "audio fade-out duration in seconds")
-	cmd.Flags().StringVar(&framesDir, "frames-dir", "", "directory for cached WebP frames")
+	cmd.Flags().StringVar(&framesDir, "frames-dir", "", "directory for cached PNG frames")
 	cmd.Flags().BoolVar(&resume, "resume", false, "reuse existing frames from --frames-dir; defaults to .cetus-frames when no directory is set")
 	cmd.Flags().BoolVar(&noGPU, "no-gpu", false, "disable GPU acceleration")
 	cmd.Flags().StringVar(&scale, "scale", "", "scale output resolution: 480p, 720p, 1080p, 4k, or WxH (e.g. 1920x1080)")
@@ -294,6 +294,12 @@ func newEncodeCommand() *cobra.Command {
 	var keepFrames bool
 	var timeoutSeconds int
 	var progressFormat string
+	var audioPath string
+	var audioVolume float64
+	var audioLoop bool
+	var audioStartSeconds float64
+	var audioFadeInSeconds float64
+	var audioFadeOutSeconds float64
 
 	cmd := &cobra.Command{
 		Use:   "encode <frames-dir>",
@@ -317,6 +323,23 @@ func newEncodeCommand() *cobra.Command {
 				return fmt.Errorf("quality must be between 0 and 51 (0 = codec default)")
 			}
 
+			audioPath = strings.TrimSpace(audioPath)
+			if audioPath == "" && audioControlFlagsChanged(cmd) {
+				return fmt.Errorf("audio controls require --audio")
+			}
+			if err := validateAudioFlagValues(audioVolume, audioStartSeconds, audioFadeInSeconds, audioFadeOutSeconds); err != nil {
+				return err
+			}
+			if audioPath != "" {
+				info, err := os.Stat(audioPath)
+				if err != nil {
+					return fmt.Errorf("stat audio file: %w", err)
+				}
+				if info.IsDir() {
+					return fmt.Errorf("audio path %q is a directory", audioPath)
+				}
+			}
+
 			composition, err := browser.CompositionFromCache(framesDir)
 			if err != nil {
 				return err
@@ -326,6 +349,11 @@ func newEncodeCommand() *cobra.Command {
 			if cmd.Flags().Changed("fps") {
 				composition.FPS = fps
 				composition.TotalFrames = int(math.Round(composition.Duration * float64(fps)))
+			}
+
+			renderDuration := float64(composition.TotalFrames) / float64(composition.FPS)
+			if audioPath != "" && audioStartSeconds >= renderDuration {
+				return fmt.Errorf("audio start %.3fs must be before render duration %.3fs", audioStartSeconds, renderDuration)
 			}
 
 			progress := newProgressLogger(cmd.ErrOrStderr(), progressFormat)
@@ -383,9 +411,17 @@ func newEncodeCommand() *cobra.Command {
 				}
 
 				encoderOpts := encoder.Options{
-					Quality:    quality,
-					Scale:      scaleFilter,
-					FrameCodec: frameCodec,
+					AudioPath:           audioPath,
+					AudioVolume:         audioVolume,
+					AudioVolumeSet:      cmd.Flags().Changed("audio-volume"),
+					AudioLoop:           audioLoop,
+					AudioStartSeconds:   audioStartSeconds,
+					AudioFadeInSeconds:  audioFadeInSeconds,
+					AudioFadeOutSeconds: audioFadeOutSeconds,
+					DurationSeconds:     renderDuration,
+					Quality:             quality,
+					Scale:               scaleFilter,
+					FrameCodec:          frameCodec,
 				}
 
 				progress.Stage("Encoding %s (%s)...", out, resolvedFormat)
@@ -424,6 +460,12 @@ func newEncodeCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&keepFrames, "keep-frames", false, "keep the frame cache directory after encoding")
 	cmd.Flags().IntVar(&timeoutSeconds, "timeout", 0, "max encode time in seconds; 0 disables deadline")
 	cmd.Flags().StringVar(&progressFormat, "progress-format", "text", "progress output format: text or json")
+	cmd.Flags().StringVar(&audioPath, "audio", "", "audio file to mux into the output (mp3, wav, m4a, aac, flac, ogg, opus)")
+	cmd.Flags().Float64Var(&audioVolume, "audio-volume", 1, "audio volume from 0.0 to 1.0")
+	cmd.Flags().BoolVar(&audioLoop, "audio-loop", false, "loop audio until the video duration is reached")
+	cmd.Flags().Float64Var(&audioStartSeconds, "audio-start", 0, "start offset into the audio file in seconds")
+	cmd.Flags().Float64Var(&audioFadeInSeconds, "audio-fade-in", 0, "audio fade-in duration in seconds")
+	cmd.Flags().Float64Var(&audioFadeOutSeconds, "audio-fade-out", 0, "audio fade-out duration in seconds")
 
 	return cmd
 }
