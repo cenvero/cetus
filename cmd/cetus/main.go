@@ -183,9 +183,9 @@ func newRenderCommand() *cobra.Command {
 
 			if framesDir != "" {
 				if resume {
-					progress.Stage("Using resumable frame cache at %s with %d worker(s)...", framesDir, concurrency)
+					progress.Stage("Resuming frame capture → %s (%d worker(s))...", framesDir, concurrency)
 				} else {
-					progress.Stage("Saving rendered frames to %s with %d worker(s)...", framesDir, concurrency)
+					progress.Stage("Rendering frames → %s (%d worker(s))...", framesDir, concurrency)
 				}
 				progress.ResetFrames()
 				if err := browser.CaptureFramesToCache(ctx, composition, browser.WorkerOptions{
@@ -200,12 +200,11 @@ func newRenderCommand() *cobra.Command {
 					return err
 				}
 
-				progress.Stage("Starting %s encoder...", resolvedFormat)
 				enc, err := encoder.New(ffmpegPath, output, composition.FPS, resolvedFormat, encoderOpts)
 				if err != nil {
 					return err
 				}
-				progress.Stage("Encoding cached frames...")
+				progress.Stage("Encoding frames → %s...", output)
 				progress.ResetFrames()
 				if err := browser.EncodeCachedFrames(composition, enc, framesDir, progress.Frames); err != nil {
 					_ = enc.Close()
@@ -424,13 +423,12 @@ func newEncodeCommand() *cobra.Command {
 					FrameCodec:          frameCodec,
 				}
 
-				progress.Stage("Encoding %s (%s)...", out, resolvedFormat)
-				progress.ResetFrames()
-
 				enc, err := encoder.New(ffmpegPath, out, composition.FPS, resolvedFormat, encoderOpts)
 				if err != nil {
 					return err
 				}
+				progress.Stage("Encoding frames → %s...", out)
+				progress.ResetFrames()
 				if err := browser.EncodeCachedFrames(composition, enc, framesDir, progress.Frames); err != nil {
 					_ = enc.Close()
 					return err
