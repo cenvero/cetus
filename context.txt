@@ -2,15 +2,102 @@
 
 Cetus renders HTML/CSS/JS compositions to video using headless Chrome + ffmpeg.
 
-## What Cetus Is
+Docs: https://cetus.cenvero.org/docs/
+If you hit the same validation error more than 3 times, read the docs page — it has the full reference.
 
-Cetus renders an HTML file to MP4/WebM video by:
-1. Opening the HTML file in headless Chrome
-2. Injecting a JS seek engine that drives each frame to an exact timestamp
-3. Taking a lossless PNG screenshot per frame
-4. Piping all frames into ffmpeg to produce the final video
+---
 
-The HTML file IS the composition — all animation, layout, and timing lives there.
+## Correct HTML Composition Structure (READ THIS FIRST)
+
+The composition root is a <div> INSIDE <body> with data-composition-id.
+Do NOT put data attributes on <body>. Do NOT use <meta name="cetus:*"> tags — they are not parsed.
+
+### Required attributes on the root <div>:
+  data-composition-id   non-empty string identifier
+  data-width            positive integer (pixels)
+  data-height           positive integer (pixels)
+  data-duration         positive float (seconds)
+
+### Optional attributes on the root <div>:
+  data-fps              positive integer (default: 30)
+
+### Required attributes on every .clip element:
+  data-start            non-negative float (seconds, when clip becomes visible)
+  data-duration         positive float (seconds, how long clip is visible)
+  data-track-index      integer (track layer, 0-based, controls z-order)
+
+### Optional attributes on every .clip element:
+  id                    string (recommended for GSAP targeting)
+  data-volume           float 0.0–1.0 (default: 1.0)
+
+### Constraint:
+  data-start + data-duration must be <= composition data-duration
+  (a clip cannot extend past the end of the composition)
+
+---
+
+## Complete Working Template
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; }
+    #root {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+    }
+    .clip { position: absolute; display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="root"
+       data-composition-id="my-comp"
+       data-width="1920"
+       data-height="1080"
+       data-duration="10"
+       data-fps="30">
+
+    <div class="clip" id="title"
+         data-start="1"
+         data-duration="5"
+         data-track-index="0"
+         style="color:white; font-size:80px; top:400px; left:200px;">
+      Hello World
+    </div>
+
+  </div>
+
+  <script>
+    const FPS = 30;
+    const DURATION = 10; // must match data-duration above
+
+    window.__timelines = [];
+
+    // paused: true is REQUIRED — Cetus seeks timelines, never plays them
+    const tl = gsap.timeline({ paused: true });
+
+    // Show clip from 1s to 6s
+    tl.set('#title', { display: 'block' }, 1)
+    tl.from('#title', { opacity: 0, duration: 0.5 }, 1)
+    tl.to('#title', { opacity: 0, duration: 0.5 }, 5.5)
+    tl.set('#title', { display: 'none' }, 6)
+
+    // CRITICAL: pin timeline to full duration or elements freeze at final state
+    tl.set({}, {}, DURATION);
+
+    // REQUIRED: register every timeline
+    window.__timelines.push(tl);
+  </script>
+</body>
+</html>
 
 ---
 
@@ -21,7 +108,7 @@ Cetus does NOT record live playback. It seeks frame-by-frame. Every animation mu
 Seek order for each frame:
 1. Calls window.__cetusRenderFrame(frameIndex, fps) if defined
 2. Calls tl.seek(cetusTime, false) on every timeline in window.__timelines[]
-3. Sets clips not active at this timestamp to display: none
+3. Sets .clip elements outside their time window to display: none
 4. Calls functions in window.__cetusFrameHooks[]
 5. Waits for pending fetch / Promise calls to settle
 6. Waits for fonts and images to load
@@ -38,36 +125,43 @@ If it is not there, Cetus never seeks it — it is frozen at its CSS initial sta
   tl.to(el, { opacity: 1, duration: 0.5 }, 1.0)   // CORRECT
   tl.to(el, { opacity: 1, duration: 0.5 }, "+=1")  // WRONG — breaks seek
 
-  // 2. Register every timeline
+  // 2. Register every timeline — REQUIRED
   window.__timelines = window.__timelines || [];
   window.__timelines.push(tl);
 
   // 3. CRITICAL: pin the timeline to the full composition duration
   // Without this, GSAP ends the timeline early and ALL elements freeze at their final state
-  const DURATION = 10; // must equal totalFrames / fps
+  const DURATION = 10; // must equal data-duration on root div
   tl.set({}, {}, DURATION);
 
   // 4. Always create timelines paused — Cetus seeks them, never plays them
+  // validator will ERROR if paused: true is missing
   const tl = gsap.timeline({ paused: true });
 
   // 5. Never use CSS transitions or @keyframes on seekable elements — use GSAP only
 
-  // 6. Default clips to display:none, show them with GSAP at the right time
+  // 6. Default clips to display:none in CSS (already handled if you use .clip class)
 
 ---
 
-## Composition Config
+## Validation Rules (cetus validate)
 
-cetus.json:
-  { "id": "my-comp", "fps": 30, "width": 1920, "height": 1080, "totalFrames": 300 }
+cetus validate will ERROR if:
+  - No element has data-composition-id
+  - data-width, data-height, or data-duration missing from root
+  - Any .clip is missing data-start, data-duration, or data-track-index
+  - Any clip's start + duration exceeds composition duration
+  - GSAP timeline created without paused: true
+  - GSAP timeline created without window.__timelines.push(tl)
+  - Any referenced local asset file does not exist
 
-HTML meta tags (equivalent):
-  <meta name="cetus:fps" content="30">
-  <meta name="cetus:width" content="1920">
-  <meta name="cetus:height" content="1080">
-  <meta name="cetus:totalFrames" content="300">
+cetus validate will WARN if:
+  - Remote URLs used (fonts.googleapis.com, cdnjs, etc.) — prefer local assets
+  - No .clip elements found
+  - Duplicate clip IDs
+  - Elements positioned outside the frame bounds
 
-totalFrames = fps x durationSeconds. Example: 10s at 30fps = 300 frames.
+Warnings do not block rendering. Errors do.
 
 ---
 
@@ -108,24 +202,29 @@ When to use --frames-dir:
 
 ## Common Mistakes
 
-1. Relative GSAP positions (+=1, <, -=0.5) — use absolute seconds always
-2. Missing tl.set({},{},DURATION) — timeline ends early, elements freeze at final state
-3. Not pushing to window.__timelines — timeline is never seeked
-4. CSS transition or @keyframes on seekable elements — does not respond to JS seek
-5. No paused: true on timeline — frame capture artifacts
-6. totalFrames mismatch — last N frames render as frozen final state
-7. Using cetus preview to check specific frames — preview only shows t=0; use cetus seek
+1. Putting data attributes on <body> instead of a <div> inside body
+2. Using <meta name="cetus:fps"> — these are NOT parsed by Cetus
+3. Missing data-track-index on .clip elements — it is REQUIRED
+4. Relative GSAP positions (+=1, <, -=0.5) — use absolute seconds always
+5. Missing tl.set({},{},DURATION) — timeline ends early, elements freeze at final state
+6. Not pushing to window.__timelines — timeline is never seeked
+7. No paused: true on timeline — validator errors, seek artifacts
+8. CSS transition or @keyframes on seekable elements — does not respond to JS seek
+9. clip start + duration exceeds composition duration — validation error
+10. Using cetus preview to check specific frames — preview only shows t=0; use cetus seek
 
 ---
 
 ## Debugging Checklist
 
-- cetus validate cetus.html — check before long renders
+- cetus validate cetus.html — always run before rendering
+- If same error appears 3+ times: read https://cetus.cenvero.org/docs/
 - cetus seek cetus.html --at 2s -o check.png — inspect any frame without full render
 - Black screen → no timelines registered, or all elements display:none
 - Frozen frame → missing tl.set({},{},DURATION)
-- Element invisible → missing tl.set({display:'block'}, startTime)
+- Element invisible → missing tl.set({display:'block'}, startTime) or wrong data-start
 - Wrong timing → check all positions are absolute seconds
+- Validation error on clip → check data-start, data-duration, data-track-index all present
 - Render stopped → use --resume to continue
 
 ---

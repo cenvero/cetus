@@ -4,7 +4,8 @@ You are an expert Cetus developer. Cetus renders HTML/CSS/JS compositions to vid
 
 $ARGUMENTS
 
-> **Full CLI reference** — always up to date: run `cetus context` in the terminal to get the complete CLI reference with every flag. The output is generated dynamically from the binary, so it reflects the exact installed version. The static docs (seek engine, GSAP rules, guides) live in `cmd/cetus/context.txt` in the repo.
+> **Full CLI reference** — run `cetus context` in the terminal. Generated dynamically from the binary so it always reflects the exact installed version.
+> **Docs** — https://cetus.cenvero.org/docs/ — if you hit the same validation error more than 3 times, read the docs page before trying again.
 
 ---
 
@@ -68,33 +69,50 @@ const tl = gsap.timeline({ paused: true });
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="cetus:fps" content="30">
-  <meta name="cetus:width" content="1920">
-  <meta name="cetus:height" content="1080">
-  <meta name="cetus:totalFrames" content="300">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+    body { margin: 0; }
+    #root { width: 1920px; height: 1080px; overflow: hidden; background: #000; position: relative; }
     .clip { position: absolute; display: none; }
   </style>
 </head>
 <body>
-  <div class="clip" id="title" style="color:white;font-size:80px;top:400px;left:200px">Hello</div>
+  <!-- Root div carries all composition config as data attributes -->
+  <!-- Do NOT use <meta name="cetus:*"> — they are not parsed -->
+  <!-- Do NOT put data attributes on <body> -->
+  <div id="root"
+       data-composition-id="my-comp"
+       data-width="1920"
+       data-height="1080"
+       data-duration="10"
+       data-fps="30">
+
+    <!-- Every .clip needs data-start, data-duration, AND data-track-index (all required) -->
+    <div class="clip" id="title"
+         data-start="1"
+         data-duration="5"
+         data-track-index="0"
+         style="color:white; font-size:80px; top:400px; left:200px;">
+      Hello
+    </div>
+
+  </div>
 
   <script>
     const FPS = 30;
-    const DURATION = 10; // seconds — totalFrames / fps
+    const DURATION = 10; // must match data-duration above
 
     window.__timelines = [];
 
+    // paused: true is REQUIRED — validator errors without it
     const tl = gsap.timeline({ paused: true });
 
-    // Show title 1s–4s
+    // Show title 1s–6s
     tl.set('#title', { display: 'block' }, 1.0)
     tl.from('#title', { opacity: 0, duration: 0.5 }, 1.0)
-    tl.to('#title', { opacity: 0, duration: 0.5 }, 3.5)
-    tl.set('#title', { display: 'none' }, 4.0)
+    tl.to('#title', { opacity: 0, duration: 0.5 }, 5.5)
+    tl.set('#title', { display: 'none' }, 6.0)
 
     // CRITICAL: pin timeline to full duration or all elements freeze at final state
     tl.set({}, {}, DURATION);
@@ -109,28 +127,32 @@ const tl = gsap.timeline({ paused: true });
 
 ## Composition Config
 
-Cetus reads settings from a sidecar `cetus.json` **or** `<meta>` tags in the HTML.
+Settings live as `data-*` attributes on the root `<div data-composition-id>` element. There is no other way.
 
-**cetus.json:**
-```json
-{
-  "id": "my-composition",
-  "fps": 30,
-  "width": 1920,
-  "height": 1080,
-  "totalFrames": 300
-}
-```
-
-**HTML meta tags (equivalent):**
+**Required on root div:**
 ```html
-<meta name="cetus:fps" content="30">
-<meta name="cetus:width" content="1920">
-<meta name="cetus:height" content="1080">
-<meta name="cetus:totalFrames" content="300">
+<div id="root"
+     data-composition-id="my-comp"
+     data-width="1920"
+     data-height="1080"
+     data-duration="10"
+     data-fps="30">
 ```
 
-`totalFrames` = `fps × durationSeconds`. Example: 10s at 30fps = 300 frames.
+**Required on every `.clip`:**
+```html
+<div class="clip"
+     data-start="0"
+     data-duration="5"
+     data-track-index="0">
+```
+
+- `data-start` — when clip appears (seconds, >= 0)
+- `data-duration` — how long clip is visible (seconds, > 0)
+- `data-track-index` — layer order (integer, 0-based)
+- `data-start + data-duration` must be <= `data-duration` on root
+
+**Do NOT use `<meta name="cetus:*">` tags — they are not parsed by Cetus.**
 
 ---
 
@@ -326,22 +348,28 @@ cetus encode .cetus-frames -o output.mp4
 
 ## Common Mistakes
 
-1. **Relative GSAP positions** (`+=1`, `<`, `-=0.5`) — break seeking; use absolute seconds always
-2. **Missing `tl.set({},{},DURATION)`** — timeline ends early, all elements freeze at final state for remaining frames
-3. **Not pushing to `window.__timelines`** — Cetus never seeks the timeline
-4. **CSS `transition` or `@keyframes`** on seekable elements — CSS animations don't respond to JS seek
-5. **No `paused: true`** on timeline — causes frame capture artifacts
-6. **`totalFrames` mismatch** — if meta says 300 frames but animation ends at frame 200, last 100 frames render as frozen final state
-7. **`cetus preview` for checking specific frames** — preview only shows t=0; use `cetus seek` instead
+1. **Putting data attributes on `<body>`** — root must be a `<div>` inside body with `data-composition-id`
+2. **Using `<meta name="cetus:*">` tags** — NOT parsed by Cetus; use data attributes on root div only
+3. **Missing `data-track-index` on clips** — required on every `.clip`, validator will error
+4. **Clip extends past composition** — `data-start + data-duration` must be <= root `data-duration`
+5. **Relative GSAP positions** (`+=1`, `<`, `-=0.5`) — break seeking; use absolute seconds always
+6. **Missing `tl.set({},{},DURATION)`** — timeline ends early, all elements freeze at final state
+7. **Not pushing to `window.__timelines`** — Cetus never seeks the timeline
+8. **No `paused: true`** on timeline — validator errors, frame capture artifacts
+9. **CSS `transition` or `@keyframes`** on seekable elements — does not respond to JS seek
+10. **`cetus preview` for checking specific frames** — preview only shows t=0; use `cetus seek`
+11. **Same validation error 3+ times** — read https://cetus.cenvero.org/docs/ before trying again
 
 ---
 
 ## Debugging Checklist
 
-- `cetus validate cetus.html` — check for errors before starting a long render
+- `cetus validate cetus.html` — always run before rendering, fixes most issues immediately
+- If same error appears 3+ times → read https://cetus.cenvero.org/docs/
 - `cetus seek cetus.html --at 2s -o check.png` — inspect any frame without full render
-- Black screen → no timelines registered, or all elements `display:none` with no GSAP to show them
-- Frozen frame → timeline ended before this timestamp; add `tl.set({},{},DURATION)`
-- Element invisible → check default `display:none` + `tl.set({display:'block'}, startTime)` in timeline
-- Wrong timing → check all positions are absolute seconds, not relative offsets
+- Black screen → no timelines registered, or all elements `display:none`
+- Frozen frame → missing `tl.set({},{},DURATION)`
+- Element invisible → check `data-start`/`data-duration` on clip + `tl.set({display:'block'}, startTime)`
+- Validation error on clip → verify `data-start`, `data-duration`, `data-track-index` all present
+- Wrong timing → check all GSAP positions are absolute seconds, not relative offsets
 - Render stopped → use `--resume` to continue from where it left off
