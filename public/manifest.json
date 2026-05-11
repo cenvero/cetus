@@ -1,12 +1,13 @@
 {
-  "generated_at": "2026-05-11T13:47:11Z",
+  "generated_at": "2026-05-11T19:29:45Z",
   "channels": {
     "stable": {
-      "version": "v0.8.0",
-      "release_date": "2026-05-11T13:47:11Z",
+      "version": "v0.9.0",
+      "release_date": "2026-05-11T19:29:45Z",
       "min_supported": "v0.1.0",
-      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.8.0",
+      "release_notes_url": "https://github.com/cenvero/cetus/releases/tag/v0.9.0",
       "history": [
+        "v0.9.0",
         "v0.8.0",
         "v0.7.0",
         "v0.6.0",
@@ -262,6 +263,32 @@
         "sha256": "30f45fef52ae807b10dbd83a3f27dc355e4c7366ca9237e3a9d046cf97e13ef5",
         "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.8.0/cetus_v0.8.0_darwin_arm64.tar.gz.minisig",
         "size": 76349970
+      }
+    },
+    "v0.9.0": {
+      "darwin-arm64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_darwin_arm64.tar.gz",
+        "sha256": "818a33ffe3ee011b6440c3c610d80b04e22257a4ff32bec81e7b7e0e37cec85c",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_darwin_arm64.tar.gz.minisig",
+        "size": 76381941
+      },
+      "linux-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_linux_amd64.tar.gz",
+        "sha256": "d2eb2c0aa3021af37f42388407acabd2be1bdbc9c07dd1f2d96a8185be7c2177",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_linux_amd64.tar.gz.minisig",
+        "size": 126534475
+      },
+      "windows-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_windows_amd64.zip",
+        "sha256": "0aaab2de852caba132f37f93610ed7cb3db82ae63fbf1f8d1c2946795dc09c8e",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_windows_amd64.zip.minisig",
+        "size": 109210216
+      },
+      "darwin-amd64": {
+        "url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_darwin_amd64.tar.gz",
+        "sha256": "1c72c6bae64532f6c7adff282ccf7f399ae9499fd6b7e4fa0123d6ac2c4bdfed",
+        "signature_url": "https://github.com/cenvero/cetus/releases/download/v0.9.0/cetus_v0.9.0_darwin_amd64.tar.gz.minisig",
+        "size": 86602445
       }
     }
   }
