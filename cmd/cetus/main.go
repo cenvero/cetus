@@ -35,6 +35,8 @@ func newRootCommand() *cobra.Command {
 	}
 	root.AddCommand(newRenderCommand())
 	root.AddCommand(newEncodeCommand())
+	root.AddCommand(newSeekCommand())
+	root.AddCommand(newWatchCommand())
 	root.AddCommand(newValidateCommand())
 	root.AddCommand(newPreviewCommand())
 	root.AddCommand(newUpdateCommand())
@@ -63,6 +65,7 @@ func newRenderCommand() *cobra.Command {
 	var quality int
 	var keepFrames bool
 	var progressFormat string
+	var subtitlesPath string
 
 	cmd := &cobra.Command{
 		Use:   "render cetus.html -o out.mp4",
@@ -175,6 +178,7 @@ func newRenderCommand() *cobra.Command {
 				Quality:             quality,
 				Scale:               scaleFilter,
 				FrameCodec:          "png",
+				SubtitlesPath:       strings.TrimSpace(subtitlesPath),
 			}
 			browserOpts := browser.Options{
 				ChromePath: chromePath,
@@ -278,6 +282,7 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().IntVar(&quality, "quality", 0, "encoder CRF quality (0 = codec default; lower = better quality, larger file)")
 	cmd.Flags().BoolVar(&keepFrames, "keep-frames", false, "keep the frame cache directory after a successful render")
 	cmd.Flags().StringVar(&progressFormat, "progress-format", "text", "progress output format: text or json")
+	cmd.Flags().StringVar(&subtitlesPath, "subtitles", "", "subtitle file to burn into the video (SRT or ASS)")
 	_ = cmd.MarkFlagRequired("output")
 
 	return cmd
@@ -299,6 +304,7 @@ func newEncodeCommand() *cobra.Command {
 	var audioStartSeconds float64
 	var audioFadeInSeconds float64
 	var audioFadeOutSeconds float64
+	var subtitlesPath string
 
 	cmd := &cobra.Command{
 		Use:   "encode <frames-dir>",
@@ -421,6 +427,7 @@ func newEncodeCommand() *cobra.Command {
 					Quality:             quality,
 					Scale:               scaleFilter,
 					FrameCodec:          frameCodec,
+					SubtitlesPath:       strings.TrimSpace(subtitlesPath),
 				}
 
 				enc, err := encoder.New(ffmpegPath, out, composition.FPS, resolvedFormat, encoderOpts)
@@ -464,6 +471,7 @@ func newEncodeCommand() *cobra.Command {
 	cmd.Flags().Float64Var(&audioStartSeconds, "audio-start", 0, "start offset into the audio file in seconds")
 	cmd.Flags().Float64Var(&audioFadeInSeconds, "audio-fade-in", 0, "audio fade-in duration in seconds")
 	cmd.Flags().Float64Var(&audioFadeOutSeconds, "audio-fade-out", 0, "audio fade-out duration in seconds")
+	cmd.Flags().StringVar(&subtitlesPath, "subtitles", "", "subtitle file to burn into the video (SRT or ASS)")
 
 	return cmd
 }

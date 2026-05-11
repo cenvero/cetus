@@ -35,6 +35,7 @@ type RenderOptions struct {
 	Quality             int
 	Scale               string
 	KeepFrames          bool
+	SubtitlesPath       string
 }
 
 func Parse(path string) (*compose.Composition, error) {
@@ -109,6 +110,7 @@ func Render(ctx context.Context, inputPath, outputPath string, opts RenderOption
 		Quality:             opts.Quality,
 		Scale:               scaleFilter,
 		FrameCodec:          "png",
+		SubtitlesPath:       strings.TrimSpace(opts.SubtitlesPath),
 	}
 	browserOpts := browser.Options{
 		ChromePath: chromePath,

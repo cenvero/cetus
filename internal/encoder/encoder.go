@@ -22,6 +22,7 @@ type Options struct {
 	Quality             int    // CRF value; 0 means use codec default
 	Scale               string // ffmpeg scale filter value, e.g. "scale=-2:720"
 	FrameCodec          string // input frame codec: "" or "png" (default) or "webp"
+	SubtitlesPath       string // path to an SRT or ASS subtitle file to burn in
 }
 
 // ParseScale converts a user-supplied scale string to an ffmpeg scale filter value.
@@ -187,19 +188,20 @@ func buildFFmpegArgs(output string, fps int, format string, opts Options) []stri
 		args = append(args, "-i", audioPath)
 	}
 
-	// Wire video and audio streams, incorporating scale filter if requested.
+	// Wire video and audio streams, incorporating scale and/or subtitle filters.
+	videoFilter := buildVideoFilter(opts)
 	switch {
-	case opts.Scale != "" && hasComplexAudio:
-		combined := "[0:v:0]" + opts.Scale + "[vout];" + audioFilter
+	case videoFilter != "" && hasComplexAudio:
+		combined := "[0:v:0]" + videoFilter + "[vout];" + audioFilter
 		args = append(args, "-filter_complex", combined, "-map", "[vout]", "-map", "[cetus_audio]")
-	case opts.Scale != "" && hasAudio:
-		args = append(args, "-filter_complex", "[0:v:0]"+opts.Scale+"[vout]", "-map", "[vout]", "-map", "1:a:0?")
+	case videoFilter != "" && hasAudio:
+		args = append(args, "-filter_complex", "[0:v:0]"+videoFilter+"[vout]", "-map", "[vout]", "-map", "1:a:0?")
 	case hasComplexAudio:
 		args = append(args, "-filter_complex", audioFilter, "-map", "0:v:0", "-map", "[cetus_audio]")
 	case hasAudio:
 		args = append(args, "-map", "0:v:0", "-map", "1:a:0?")
-	case opts.Scale != "":
-		args = append(args, "-vf", opts.Scale)
+	case videoFilter != "":
+		args = append(args, "-vf", videoFilter)
 	}
 
 	switch format {
@@ -274,4 +276,33 @@ func buildAudioFilter(opts Options) (string, bool) {
 
 func formatFilterFloat(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+// buildVideoFilter combines scale and subtitle filters into one ffmpeg filter chain string.
+func buildVideoFilter(opts Options) string {
+	var parts []string
+	if opts.Scale != "" {
+		parts = append(parts, opts.Scale)
+	}
+	if strings.TrimSpace(opts.SubtitlesPath) != "" {
+		abs, err := filepath.Abs(opts.SubtitlesPath)
+		if err != nil {
+			abs = opts.SubtitlesPath
+		}
+		parts = append(parts, "subtitles="+escapeSubtitlesPath(abs))
+	}
+	return strings.Join(parts, ",")
+}
+
+// escapeSubtitlesPath escapes a file path for use inside an ffmpeg filter expression.
+// Forward slashes are used on all platforms; special filter characters are backslash-escaped.
+func escapeSubtitlesPath(p string) string {
+	p = filepath.ToSlash(p)
+	p = strings.ReplaceAll(p, "\\", "\\\\")
+	p = strings.ReplaceAll(p, ":", "\\:")
+	p = strings.ReplaceAll(p, "'", "\\'")
+	p = strings.ReplaceAll(p, ",", "\\,")
+	p = strings.ReplaceAll(p, "[", "\\[")
+	p = strings.ReplaceAll(p, "]", "\\]")
+	return "'" + p + "'"
 }
