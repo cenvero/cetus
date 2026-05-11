@@ -71,7 +71,7 @@ func readCache() (cacheEntry, bool) {
 	if path == "" {
 		return cacheEntry{}, false
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is constructed from os.UserCacheDir(), a trusted user-controlled location
 	if err != nil {
 		return cacheEntry{}, false
 	}

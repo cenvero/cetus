@@ -13,8 +13,8 @@ func TestResolveFormat(t *testing.T) {
 		want     string
 	}{
 		{name: "explicit mp4", output: "out.webm", explicit: "mp4", want: "mp4"},
+		{name: "mp4 extension", output: "out.mp4", want: "mp4"},
 		{name: "webm extension", output: "out.webm", want: "webm"},
-		{name: "mp4 fallback", output: "out.mov", want: "mp4"},
 	}
 
 	for _, tt := range tests {
@@ -32,7 +32,13 @@ func TestResolveFormat(t *testing.T) {
 
 func TestResolveFormatRejectsUnknown(t *testing.T) {
 	if _, err := ResolveFormat("out.mp4", "gif"); err == nil {
-		t.Fatal("ResolveFormat returned nil error")
+		t.Fatal("ResolveFormat should reject unknown explicit format")
+	}
+	if _, err := ResolveFormat("out.mov", ""); err == nil {
+		t.Fatal("ResolveFormat should reject unknown extension")
+	}
+	if _, err := ResolveFormat("out", ""); err == nil {
+		t.Fatal("ResolveFormat should reject missing extension")
 	}
 }
 
