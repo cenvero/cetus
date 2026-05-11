@@ -138,12 +138,15 @@ func parseSemver(v string) [3]int {
 	}
 	parts := strings.SplitN(v, ".", 3)
 	var out [3]int
-	for i, p := range parts {
-		if i >= 3 {
-			break
-		}
-		n, _ := strconv.Atoi(p)
-		out[i] = n
+	switch len(parts) {
+	case 3:
+		out[2], _ = strconv.Atoi(parts[2])
+		fallthrough
+	case 2:
+		out[1], _ = strconv.Atoi(parts[1])
+		fallthrough
+	case 1:
+		out[0], _ = strconv.Atoi(parts[0])
 	}
 	return out
 }
