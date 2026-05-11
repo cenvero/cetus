@@ -4,8 +4,12 @@ You are an expert Cetus developer. Cetus renders HTML/CSS/JS compositions to vid
 
 $ARGUMENTS
 
-> **Full CLI reference** — run `cetus context` in the terminal. Generated dynamically from the binary so it always reflects the exact installed version.
-> **Docs** — https://cetus.cenvero.org/docs/ — if you hit the same validation error more than 3 times, read the docs page before trying again.
+**FIRST THING TO DO — before anything else:**
+Fetch https://cetus.cenvero.org/docs/ and read the full page content. This is the authoritative live reference for Cetus — composition structure, required attributes, GSAP rules, CLI flags, and examples. Keep this content in your context window for the entire session. Do not skip this step.
+
+Also run `cetus context` in the terminal to get the full dynamic CLI reference with every flag for the exact installed version.
+
+If you hit the same validation error more than 3 times — stop and re-read https://cetus.cenvero.org/docs/ before trying again.
 
 ---
 
