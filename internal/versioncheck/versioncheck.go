@@ -59,11 +59,11 @@ func check(currentVersion string) (latestVersion string, newer bool) {
 }
 
 func cacheFile() string {
-	dir, err := os.UserCacheDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "cetus", "update_check.json")
+	return filepath.Join(home, ".cenvero-cetus", "update_check.json")
 }
 
 func readCache() (cacheEntry, bool) {
@@ -71,7 +71,7 @@ func readCache() (cacheEntry, bool) {
 	if path == "" {
 		return cacheEntry{}, false
 	}
-	data, err := os.ReadFile(path) // #nosec G304 -- path is constructed from os.UserCacheDir(), a trusted user-controlled location
+	data, err := os.ReadFile(path) // #nosec G304 -- path is constructed from os.UserHomeDir(), a trusted user-controlled location
 	if err != nil {
 		return cacheEntry{}, false
 	}
