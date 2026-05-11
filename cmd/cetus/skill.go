@@ -54,8 +54,8 @@ func BackgroundSkillUpdate() {
 			return // unchanged
 		}
 		// Skill changed — update silently
-		_ = os.MkdirAll(filepath.Dir(globalDest), 0o755)
-		_ = os.WriteFile(globalDest, data, 0o644)
+		_ = os.MkdirAll(filepath.Dir(globalDest), 0o750)
+		_ = os.WriteFile(globalDest, data, 0o600)
 	}()
 }
 
@@ -236,10 +236,10 @@ func downloadAndInstallSkill(cmd *cobra.Command, url, dest, tool string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
-	if err := os.WriteFile(dest, data, 0o644); err != nil {
+	if err := os.WriteFile(dest, data, 0o600); err != nil {
 		return fmt.Errorf("write skill: %w", err)
 	}
 
@@ -369,7 +369,9 @@ Example:
 			if !yes {
 				fmt.Fprint(out, "\nAre you sure? [y/N] ")
 				var answer string
-				fmt.Fscan(cmd.InOrStdin(), &answer)
+				if _, err := fmt.Fscan(cmd.InOrStdin(), &answer); err != nil {
+					answer = ""
+				}
 				if answer != "y" && answer != "Y" {
 					fmt.Fprintln(out, "Aborted.")
 					return nil
