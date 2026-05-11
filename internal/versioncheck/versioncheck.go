@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,6 +102,48 @@ func writeCache(entry cacheEntry) {
 	_ = os.WriteFile(path, data, 0o600)
 }
 
+// isNewer returns true only if latest is strictly greater than current.
+// Both versions may have an optional "v" prefix (e.g. "v0.9.0" or "0.9.0").
+// Pre-release suffixes (e.g. "-beta") are stripped before comparison so a
+// stable version is never incorrectly promoted over a pre-release binary.
 func isNewer(latest, current string) bool {
-	return latest != "" && strings.TrimPrefix(latest, "v") != strings.TrimPrefix(current, "v")
+	if latest == "" {
+		return false
+	}
+	return semverGT(latest, current)
+}
+
+// semverGT returns true if a > b, comparing major.minor.patch numerically.
+func semverGT(a, b string) bool {
+	ap := parseSemver(a)
+	bp := parseSemver(b)
+	for i := range ap {
+		if ap[i] > bp[i] {
+			return true
+		}
+		if ap[i] < bp[i] {
+			return false
+		}
+	}
+	return false
+}
+
+// parseSemver strips the leading "v" and any pre-release suffix, then returns
+// [major, minor, patch] as integers. Malformed segments default to 0.
+func parseSemver(v string) [3]int {
+	v = strings.TrimPrefix(v, "v")
+	// strip pre-release suffix (e.g. "-beta", "-rc.1")
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		v = v[:i]
+	}
+	parts := strings.SplitN(v, ".", 3)
+	var out [3]int
+	for i, p := range parts {
+		if i >= 3 {
+			break
+		}
+		n, _ := strconv.Atoi(p)
+		out[i] = n
+	}
+	return out
 }
