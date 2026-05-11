@@ -9,266 +9,534 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
       --bg: #030508;
       --bg2: #080b11;
-      --panel: rgba(10,14,22,0.6);
+      --card: rgba(10, 14, 22, 0.6);
+      --card-hover: rgba(15, 20, 30, 0.82);
       --text: #f0f4f8;
       --muted: #94a3b8;
       --subtle: #475569;
       --accent: #00ebb8;
       --accent-hover: #00ffd0;
-      --accent-soft: rgba(0,235,184,0.1);
-      --accent-border: rgba(0,235,184,0.25);
-      --border: rgba(255,255,255,0.08);
-      --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
-      --sans: "Inter", system-ui, sans-serif;
+      --accent-soft: rgba(0, 235, 184, 0.1);
+      --accent-border: rgba(0, 235, 184, 0.25);
+      --border: rgba(255, 255, 255, 0.08);
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --radius: 12px;
       --nav-h: 64px;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
-      background: linear-gradient(180deg,rgba(0,235,184,.035),rgba(3,5,8,0) 32rem), var(--bg);
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(0, 235, 184, 0.035), rgba(3, 5, 8, 0) 32rem),
+        var(--bg);
       color: var(--text);
       font-family: var(--sans);
       font-size: 15px;
       line-height: 1.6;
+      overflow-x: hidden;
     }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     code, pre { font-family: var(--mono); }
-    .wrap { width: min(960px, calc(100% - 32px)); margin: 0 auto; }
 
     /* Nav */
     .nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
       height: var(--nav-h);
-      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      padding: 0 clamp(20px, 5vw, 60px);
+      background: rgba(3, 5, 8, 0.72);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
     }
-    .nav .wrap { display: flex; align-items: center; gap: 32px; width: 100%; }
-    .nav-logo { font-weight: 700; font-size: 18px; color: var(--text); letter-spacing: -.3px; }
-    .nav-logo span { color: var(--accent); }
-    .nav-links { display: flex; gap: 24px; margin-left: auto; }
-    .nav-links a { color: var(--muted); font-size: 14px; }
-    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-links a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+    .nav-links a:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+      text-decoration: none;
+    }
+    .nav-links a.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .nav-links .nav-cta {
+      color: var(--bg);
+      background: var(--accent);
+      font-weight: 700;
+    }
+    .nav-links .nav-cta:hover {
+      color: var(--bg);
+      background: var(--accent-hover);
+      box-shadow: 0 0 20px rgba(0, 235, 184, 0.25);
+    }
+    .nav-burger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      padding: 4px;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    .nav-burger span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--text);
+      border-radius: 2px;
+    }
+    .nav-mobile {
+      display: none;
+      position: fixed;
+      top: var(--nav-h);
+      left: 0;
+      right: 0;
+      z-index: 199;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+      background: rgba(3, 5, 8, 0.96);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-mobile.open { display: flex; }
+    .nav-mobile a {
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 500;
+    }
+    .nav-mobile a:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+      text-decoration: none;
+    }
 
     /* Hero */
-    .hero { padding: 80px 0 56px; text-align: center; }
-    .hero h1 { font-size: clamp(32px,5vw,52px); font-weight: 700; letter-spacing: -.5px; line-height: 1.15; }
-    .hero h1 span { color: var(--accent); }
-    .hero p { margin-top: 16px; color: var(--muted); font-size: 17px; max-width: 560px; margin-left: auto; margin-right: auto; }
-
-    /* Install block */
-    .install-block {
-      background: var(--bg2);
+    .hero {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: clamp(60px, 10vh, 100px) clamp(20px, 5vw, 60px) clamp(40px, 6vh, 60px);
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 28px;
+      padding: 6px 16px;
       border: 1px solid var(--accent-border);
-      border-radius: 12px;
-      padding: 32px;
-      margin-bottom: 32px;
-    }
-    .install-block code {
-      display: block;
-      background: rgba(0,0,0,.4);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 18px;
-      font-size: 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
       color: var(--accent);
-      margin: 8px 0;
-      cursor: pointer;
-      transition: border-color .15s;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      box-shadow: 0 0 20px rgba(0, 235, 184, 0.1);
     }
-    .install-block code:hover { border-color: var(--accent-border); }
-    .install-block .label { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .hero h1 {
+      margin: 0 0 20px;
+      font-size: clamp(2.4rem, 5vw, 3.8rem);
+      font-weight: 700;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero p {
+      margin: 0 auto 40px;
+      max-width: 580px;
+      color: var(--muted);
+      font-size: clamp(1rem, 2vw, 1.18rem);
+      line-height: 1.7;
+    }
+
+    /* Section */
+    .section {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: clamp(48px, 8vw, 80px) clamp(20px, 5vw, 60px);
+    }
+    .section-label {
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .section-title {
+      margin: 0 0 12px;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .section-sub {
+      max-width: 600px;
+      margin: 0 0 48px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
 
     /* Skill cards */
-    .skills { padding: 0 0 80px; }
-    .skills h2 { font-size: 22px; font-weight: 600; margin-bottom: 24px; }
-    .skill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 24px;
+    }
     .skill-card {
-      background: var(--panel);
+      padding: 32px;
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 28px;
+      border-radius: var(--radius);
+      background: var(--card);
+      backdrop-filter: blur(10px);
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 0;
+      transition: transform 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
     }
-    .skill-card.active { border-color: var(--accent-border); }
-    .skill-card.coming { opacity: .55; }
-    .skill-name { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-    .skill-badge {
-      font-size: 11px;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 20px;
+    .skill-card:hover {
+      border-color: var(--accent-border);
+      background: var(--card-hover);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.38);
+    }
+    .skill-card.dimmed { opacity: 0.5; pointer-events: none; }
+    .skill-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      border: 1px solid var(--accent-border);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(0, 235, 184, 0.1), rgba(0, 235, 184, 0.02));
+    }
+    .skill-icon svg { width: 22px; height: 22px; stroke: var(--accent); stroke-width: 1.8; }
+    .skill-name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 10px;
+      border-radius: 999px;
       background: var(--accent-soft);
       color: var(--accent);
       border: 1px solid var(--accent-border);
+      letter-spacing: 0.04em;
     }
-    .skill-badge.soon {
-      background: rgba(100,116,139,.1);
+    .badge.soon {
+      background: rgba(100, 116, 139, 0.1);
       color: var(--muted);
       border-color: var(--border);
     }
-    .skill-desc { color: var(--muted); font-size: 14px; line-height: 1.5; }
-    .skill-commands { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-    .skill-commands code {
-      font-size: 13px;
-      background: rgba(0,0,0,.3);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 10px;
-      color: var(--accent);
+    .skill-desc {
+      color: var(--muted);
+      font-size: 0.93rem;
+      line-height: 1.6;
+      margin-bottom: 20px;
+      flex: 1;
     }
-    .skill-link { margin-top: auto; }
-    .skill-link a {
+    .skill-cmds {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+    .skill-cmds code {
+      display: block;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--accent);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: border-color 150ms ease;
+    }
+    .skill-cmds code:hover { border-color: var(--accent-border); }
+    .skill-cmd-note {
+      font-size: 0.8rem;
+      color: var(--subtle);
+      margin-bottom: 20px;
+    }
+    .skill-link {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 0.88rem;
+      font-weight: 600;
       color: var(--accent);
+      margin-top: auto;
     }
+    .skill-link:hover { text-decoration: underline; }
 
-    /* What you get */
-    .features { padding: 0 0 80px; }
-    .features h2 { font-size: 22px; font-weight: 600; margin-bottom: 24px; }
-    .feature-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-    .feature-item {
-      background: var(--panel);
+    /* Feature grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      padding: 28px;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 20px;
+      border-radius: var(--radius);
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      transition: transform 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
     }
-    .feature-item strong { display: block; font-size: 14px; margin-bottom: 4px; }
-    .feature-item span { font-size: 13px; color: var(--muted); }
+    .feature-card:hover {
+      border-color: var(--accent-border);
+      background: var(--card-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.3);
+    }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+      border: 1px solid var(--accent-border);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(0, 235, 184, 0.1), rgba(0, 235, 184, 0.02));
+    }
+    .feature-icon svg { width: 20px; height: 20px; stroke: var(--accent); stroke-width: 1.8; }
+    .feature-card h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .feature-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.6; }
+    .feature-card code { color: #cbd5e1; font-size: 0.85em; }
 
-    footer { border-top: 1px solid var(--border); padding: 24px 0; color: var(--subtle); font-size: 13px; text-align: center; }
+    .divider { margin: 0; border: 0; border-top: 1px solid var(--border); }
+
+    /* Footer */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: clamp(30px, 4vw, 40px) clamp(20px, 5vw, 60px);
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+      color: var(--subtle);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--muted); transition: color 180ms ease; }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-burger { display: flex; }
+    }
   </style>
 </head>
 <body>
 
 <nav class="nav">
-  <div class="wrap">
-    <a href="/" class="nav-logo">cetus<span>.</span></a>
-    <div class="nav-links">
-      <a href="/docs/">Docs</a>
-      <a href="/build-with-ai/">Build with AI</a>
-      <a href="/get-skill/">Get Skill</a>
-      <a href="https://github.com/cenvero/cetus">GitHub</a>
-    </div>
+  <a class="nav-brand" href="/">cenvero / <span>cetus</span></a>
+  <div class="nav-links">
+    <a href="/docs/">Docs</a>
+    <a href="/build-with-ai/">Build with AI</a>
+    <a href="/get-skill/" class="active">Get Skill</a>
+    <a href="https://github.com/cenvero/cetus">GitHub</a>
+    <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+    <a href="/#install" class="nav-cta">Get Started</a>
   </div>
+  <button class="nav-burger" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
+<div class="nav-mobile" id="nav-mobile">
+  <a href="/docs/">Docs</a>
+  <a href="/build-with-ai/">Build with AI</a>
+  <a href="/get-skill/">Get Skill</a>
+  <a href="https://github.com/cenvero/cetus">GitHub</a>
+  <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+  <a href="/#install">Get Started</a>
+</div>
 
 <main>
-  <section class="hero">
-    <div class="wrap">
-      <h1>AI Skills for <span>Cetus</span></h1>
-      <p>Install the Cetus skill into your AI coding assistant. Get full composition help, correct HTML structure, GSAP rules, CLI reference, and live docs — right inside your editor.</p>
+
+  <div class="hero">
+    <div class="hero-badge">AI Skills for Cetus</div>
+    <h1>Your AI assistant<br>knows <span>Cetus</span>.</h1>
+    <p>Install the Cetus skill into your AI coding assistant. Get live docs, correct HTML structure, all CLI flags, GSAP rules, and debugging steps — right inside your editor.</p>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section">
+    <div class="section-label">Available skills</div>
+    <h2 class="section-title">Install for your AI assistant</h2>
+    <p class="section-sub">One command installs the skill globally so it works in every project, no per-project setup needed.</p>
+
+    <div class="skills-grid">
+
+      <div class="skill-card">
+        <div class="skill-icon"><i data-lucide="bot"></i></div>
+        <div class="skill-name">
+          Claude Code
+          <span class="badge">Available</span>
+        </div>
+        <p class="skill-desc">
+          Full Cetus assistant inside Claude Code. Fetches live docs on every session, knows the correct HTML structure, all CLI flags, GSAP seek rules, and common debugging steps.
+        </p>
+        <div class="skill-cmds">
+          <code onclick="copyText(this, 'cetus skill claude')">cetus skill claude</code>
+          <code onclick="copyText(this, 'cetus skill claude --local')">cetus skill claude --local</code>
+          <code onclick="copyText(this, 'cetus launch claude')">cetus launch claude</code>
+        </div>
+        <p class="skill-cmd-note">Installs globally by default. <code style="background:none;border:none;padding:0;font-size:0.78rem;">--local</code> for current project only. <code style="background:none;border:none;padding:0;font-size:0.78rem;">launch</code> installs and opens Claude Code.</p>
+        <a class="skill-link" href="https://claude.ai/code" target="_blank" rel="noopener">Get Claude Code <i data-lucide="arrow-right" style="width:14px;height:14px;"></i></a>
+      </div>
+
+      <div class="skill-card dimmed">
+        <div class="skill-icon"><i data-lucide="code-2"></i></div>
+        <div class="skill-name">
+          OpenAI Codex
+          <span class="badge soon">Coming soon</span>
+        </div>
+        <p class="skill-desc">
+          Cetus skill for OpenAI Codex CLI. Same composition knowledge and CLI reference, adapted for the Codex workflow.
+        </p>
+        <div class="skill-cmds">
+          <code style="opacity:0.4;">cetus skill codex</code>
+        </div>
+        <a class="skill-link" href="https://github.com/cenvero/cetus" target="_blank" rel="noopener">Follow for updates <i data-lucide="arrow-right" style="width:14px;height:14px;"></i></a>
+      </div>
+
+      <div class="skill-card dimmed">
+        <div class="skill-icon"><i data-lucide="plus-circle"></i></div>
+        <div class="skill-name">
+          More skills
+          <span class="badge soon">Coming soon</span>
+        </div>
+        <p class="skill-desc">
+          Support for more AI coding assistants is on the roadmap. If you want a specific tool supported, open an issue on GitHub.
+        </p>
+        <a class="skill-link" href="https://github.com/cenvero/cetus/issues" target="_blank" rel="noopener">Request a skill <i data-lucide="arrow-right" style="width:14px;height:14px;"></i></a>
+      </div>
+
     </div>
-  </section>
+  </div>
 
-  <section class="skills">
-    <div class="wrap">
-      <h2>Available Skills</h2>
-      <div class="skill-grid">
+  <hr class="divider">
 
-        <!-- Claude Code -->
-        <div class="skill-card active">
-          <div class="skill-name">
-            Claude Code
-            <span class="skill-badge">Available</span>
-          </div>
-          <p class="skill-desc">
-            Full Cetus assistant inside Claude Code. Fetches live docs on every session, knows the correct HTML structure, all CLI flags, GSAP rules, and debugging steps.
-          </p>
-          <div class="skill-commands">
-            <code>cetus skill claude</code>
-            <code>cetus skill claude --local</code>
-            <code>cetus launch claude</code>
-          </div>
-          <div class="label" style="font-size:12px;color:var(--muted);margin-top:4px;">
-            Installs globally by default. <code style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);">--local</code> for current project only.
-          </div>
-          <div class="skill-link">
-            <a href="https://claude.ai/code">Get Claude Code →</a>
-          </div>
-        </div>
+  <div class="section">
+    <div class="section-label">What you get</div>
+    <h2 class="section-title">What the Claude Code skill does</h2>
+    <p class="section-sub">Type <code style="color:var(--accent);font-size:0.95em;">/cetus</code> in Claude Code to activate. The skill loads and stays active for the whole session.</p>
 
-        <!-- Codex -->
-        <div class="skill-card coming">
-          <div class="skill-name">
-            OpenAI Codex
-            <span class="skill-badge soon">Coming soon</span>
-          </div>
-          <p class="skill-desc">
-            Cetus skill for OpenAI Codex CLI. Same composition knowledge and CLI reference, adapted for the Codex workflow.
-          </p>
-          <div class="skill-commands">
-            <code style="opacity:.5;">cetus skill codex</code>
-          </div>
-          <div class="skill-link">
-            <a href="https://github.com/cenvero/cetus">Follow for updates →</a>
-          </div>
-        </div>
-
-        <!-- More coming -->
-        <div class="skill-card coming">
-          <div class="skill-name">
-            More Skills
-            <span class="skill-badge soon">Coming soon</span>
-          </div>
-          <p class="skill-desc">
-            Support for more AI coding assistants is on the roadmap. If you want a specific tool supported, open an issue on GitHub.
-          </p>
-          <div class="skill-link">
-            <a href="https://github.com/cenvero/cetus/issues">Request a skill →</a>
-          </div>
-        </div>
-
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="file-search"></i></div>
+        <h3>Fetches live docs</h3>
+        <p>Reads <code>cetus.cenvero.org/docs/</code> at session start so it always has the latest composition reference, not stale training data.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="layout-template"></i></div>
+        <h3>Correct HTML structure</h3>
+        <p>Knows all required <code>data-*</code> attributes on the root div and every clip including <code>data-track-index</code>. No more validation errors.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="terminal"></i></div>
+        <h3>Full CLI reference</h3>
+        <p>Runs <code>cetus context</code> to get every flag for the exact installed version. Render, encode, seek, watch, validate — all covered.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="film"></i></div>
+        <h3>GSAP seek rules</h3>
+        <p>Enforces absolute positions, paused timelines, <code>window.__timelines</code> registration, and duration pinning. Prevents the most common composition bugs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="refresh-cw"></i></div>
+        <h3>Auto-updates</h3>
+        <p>Cetus checks the remote skill every 10 minutes and updates your global install silently when content changes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i data-lucide="bug"></i></div>
+        <h3>Debugging guide</h3>
+        <p>Black screen, frozen frames, invisible elements — the skill knows what to check and how to fix each issue without you needing to explain the render model.</p>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section class="features">
-    <div class="wrap">
-      <h2>What the Claude Code Skill Does</h2>
-      <div class="feature-list">
-        <div class="feature-item">
-          <strong>Fetches live docs</strong>
-          <span>Reads cetus.cenvero.org/docs/ at session start so it always has the latest reference.</span>
-        </div>
-        <div class="feature-item">
-          <strong>Correct HTML structure</strong>
-          <span>Knows all required data attributes on root div and every clip. No more validation errors.</span>
-        </div>
-        <div class="feature-item">
-          <strong>Full CLI reference</strong>
-          <span>Runs <code>cetus context</code> to get every flag for the exact installed version.</span>
-        </div>
-        <div class="feature-item">
-          <strong>GSAP seek rules</strong>
-          <span>Enforces absolute positions, paused timelines, window.__timelines registration, and duration pinning.</span>
-        </div>
-        <div class="feature-item">
-          <strong>Auto-updates</strong>
-          <span>Cetus checks the remote skill for changes every 10 minutes and updates your global install silently.</span>
-        </div>
-        <div class="feature-item">
-          <strong>Debugging guide</strong>
-          <span>Black screen, frozen frames, invisible elements — the skill knows what to check and how to fix it.</span>
-        </div>
-      </div>
-    </div>
-  </section>
 </main>
 
 <footer>
-  <div class="wrap">AGPL-3.0-or-later. Built by Cenvero.</div>
+  <div>(c) 2026 Cenvero — AGPL-3.0-or-later</div>
+  <div class="footer-links">
+    <a href="/docs/">Docs</a>
+    <a href="/build-with-ai/">Build with AI</a>
+    <a href="/get-skill/">Get Skill</a>
+    <a href="https://github.com/cenvero/cetus">GitHub</a>
+    <a href="https://github.com/cenvero/cetus/releases">Releases</a>
+    <a href="mailto:security@cenvero.org">security@cenvero.org</a>
+  </div>
 </footer>
 
+<script>
+  function toggleMenu() {
+    document.getElementById("nav-mobile").classList.toggle("open");
+  }
+
+  function copyText(el, text) {
+    navigator.clipboard.writeText(text).then(function() {
+      const orig = el.textContent;
+      el.textContent = "copied!";
+      setTimeout(function() { el.textContent = orig; }, 1800);
+    });
+  }
+
+  if (window.lucide) lucide.createIcons();
+</script>
 </body>
 </html>
