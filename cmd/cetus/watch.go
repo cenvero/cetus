@@ -190,6 +190,7 @@ Examples:
 						fmt.Fprintf(cmd.ErrOrStderr(), "encode: %v\n", err)
 						return
 					}
+					progress.Stage("Finalizing %s...", output)
 					if err := enc.Close(); err != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), "finalize: %v\n", err)
 						return
@@ -216,6 +217,7 @@ Examples:
 						return
 					}
 					b.Close()
+					progress.Stage("Finalizing %s...", output)
 					if err := enc.Close(); err != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), "finalize: %v\n", err)
 						return

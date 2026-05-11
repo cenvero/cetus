@@ -610,6 +610,9 @@ cetus render cetus.html -o vertical.mp4 --width 1080 --height 1920
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-volume 0.7 --audio-loop
 cetus render cetus.html -o out.mp4 --audio music.mp3 --audio-start 2.5 --audio-fade-in 1 --audio-fade-out 2
 
+# Burn in subtitles
+cetus render cetus.html -o out.mp4 --subtitles captions.srt
+
 # Scale output at encode time (no re-render)
 cetus render cetus.html -o out-720p.mp4 --scale 720p
 cetus render cetus.html -o out-4k.mp4 --scale 4k
@@ -626,7 +629,13 @@ cetus render cetus.html -o out.mp4 --resume --keep-frames
 cetus encode .cetus-frames -o full-1080p.mp4 -o preview-480p.mp4 --scale 480p
 
 # Extract a thumbnail from the frame cache
-cetus encode .cetus-frames --thumbnail 5s -o thumb.png</code></pre>
+cetus encode .cetus-frames --thumbnail 5s -o thumb.png
+
+# Inspect a single frame without rendering the full video
+cetus seek cetus.html --at 5s -o frame.png
+
+# Re-render automatically on every file change
+cetus watch cetus.html -o preview.mp4</code></pre>
       </div>
     </section>
   </main>
@@ -1144,12 +1153,30 @@ cetus render ${htmlFile} -o ${outputFile}
     --audio-start N         Start the audio at N seconds into the audio file (trim from the beginning). Requires --audio.
     --audio-fade-in N       Fade the audio in over the first N seconds. Requires --audio.
     --audio-fade-out N      Fade the audio out over the last N seconds of the video. Requires --audio.
+    --subtitles path        Burn a subtitle file (SRT or ASS) directly into the video frames at encode time. Use an absolute path or a path relative to where the command is run.
     --frames-dir path       Save every captured PNG frame to this directory with a config.cetus manifest. Required for --resume, --keep-frames, and multi-worker renders. The directory is auto-deleted after a successful render unless --keep-frames is set.
     --resume                Skip frames already present in --frames-dir and continue from the first missing frame. Use to recover from a crash or interruption. Cannot be used without --frames-dir.
     --keep-frames           Do not delete the --frames-dir after a successful render. Use when you plan to run cetus encode afterward to produce additional outputs or formats without re-rendering.
     --concurrency N         Run N Chrome instances in parallel to capture frames faster. Requires --frames-dir. See the concurrency guide below.
     --no-gpu                Disable GPU in headless Chrome. Use in Docker, CI runners, or headless Linux where a GPU is unavailable.
     --timeout N             Hard time limit in seconds for the entire render. If exceeded, the process exits with an error. Useful in CI pipelines (e.g. --timeout 600 for a 10-minute deadline). Frames captured before the timeout are preserved if --frames-dir is set.
+
+cetus seek cetus.html --at 5s -o frame.png
+  What it does: Opens the composition in headless Chrome, seeks to the exact timestamp using the full Cetus seek engine (timelines are seeked, hooks run, clip visibility is applied), and saves one lossless PNG.
+  When to use: Inspect any frame without rendering the full video. Use this to debug black frames, wrong element visibility, incorrect animation state, or to check a specific moment before committing to a full render.
+  Flags:
+    --at timestamp    Time to seek to. Accepts: 5s, 1.5, 1:30, 01:02:30. Required.
+    -o path           Output PNG file path. Required.
+    --fps N           Override composition FPS.
+    --width / --height   Override composition dimensions.
+    --no-gpu          Disable GPU in headless Chrome.
+    --timeout N       Max seconds for the operation.
+
+cetus watch cetus.html -o preview.mp4
+  What it does: Renders the composition once immediately, then watches the composition file and all assets in its directory for changes. Re-renders automatically after any change with a 300ms debounce.
+  When to use: During active development. Set it running, edit the composition, and the output video updates automatically.
+  Flags: Same as cetus render except --resume is not available (watch always renders fresh to avoid stale frames from a previous composition version).
+  Press Ctrl+C to stop watching.
 
 cetus encode .cetus-frames -o out.mp4
   What it does: Re-encodes an existing frame directory into video without opening Chrome again. Reads the composition settings from the config.cetus manifest written by cetus render --frames-dir.
@@ -1166,6 +1193,7 @@ cetus encode .cetus-frames -o out.mp4
     --audio-start N       Start offset into the audio file in seconds. Requires --audio.
     --audio-fade-in N     Fade audio in over N seconds from the start. Requires --audio.
     --audio-fade-out N    Fade audio out over the last N seconds of the video. Requires --audio.
+    --subtitles path      Burn a subtitle file (SRT or ASS) into the video. Applies to all -o outputs.
     --thumbnail Ns        Extract a single PNG still at time Ns (e.g. --thumbnail 5s, --thumbnail 1:30). Produces a PNG, not a video. Can be combined with -o to name the output.
     --keep-frames         Keep the frame directory after encoding (do not auto-delete).
     --timeout N           Hard time limit in seconds for the encode.

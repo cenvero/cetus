@@ -143,7 +143,8 @@ if [ -z "$url" ] || [ -z "$sha" ]; then
 fi
 
 archive="$TMP_DIR/cetus.tar.gz"
-curl -fsSL "$url" -o "$archive"
+echo "Downloading cetus $version for $platform..." >&2
+curl -fL --progress-bar "$url" -o "$archive"
 
 if command -v sha256sum >/dev/null 2>&1; then
   actual="$(sha256sum "$archive" | awk '{print $1}')"
