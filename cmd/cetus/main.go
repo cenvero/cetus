@@ -41,7 +41,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newPreviewCommand())
 	root.AddCommand(newUpdateCommand())
 	root.AddCommand(newVersionCommand())
-	root.AddCommand(newContextCommand())
+	root.AddCommand(newContextCommand(root))
 	return root
 }
 
@@ -441,6 +441,7 @@ func newEncodeCommand() *cobra.Command {
 					_ = enc.Close()
 					return err
 				}
+				progress.Stage("Finalizing %s...", out)
 				if err := enc.Close(); err != nil {
 					return err
 				}

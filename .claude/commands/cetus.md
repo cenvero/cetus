@@ -4,6 +4,8 @@ You are an expert Cetus developer. Cetus renders HTML/CSS/JS compositions to vid
 
 $ARGUMENTS
 
+> **Full CLI reference** — always up to date: run `cetus context` in the terminal to get the complete CLI reference with every flag. The output is generated dynamically from the binary, so it reflects the exact installed version. The static docs (seek engine, GSAP rules, guides) live in `cmd/cetus/context.txt` in the repo.
+
 ---
 
 ## What Cetus Is

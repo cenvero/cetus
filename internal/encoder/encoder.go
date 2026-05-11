@@ -145,10 +145,16 @@ func ResolveFormat(output, explicit string) (string, error) {
 	format := strings.ToLower(strings.TrimSpace(explicit))
 	if format == "" {
 		switch strings.ToLower(filepath.Ext(output)) {
+		case ".mp4":
+			format = "mp4"
 		case ".webm":
 			format = "webm"
 		default:
-			format = "mp4"
+			ext := filepath.Ext(output)
+			if ext == "" {
+				return "", fmt.Errorf("output file %q has no extension; use .mp4 or .webm, or pass --format", output)
+			}
+			return "", fmt.Errorf("unrecognized output extension %q; use .mp4 or .webm, or pass --format", ext)
 		}
 	}
 
