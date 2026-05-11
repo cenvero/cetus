@@ -32,6 +32,7 @@ func main() {
 	var updateNotice <-chan string
 	if len(os.Args) < 2 || !skipCheck[os.Args[1]] {
 		updateNotice = versioncheck.BackgroundCheck(version.Version)
+		BackgroundSkillUpdate()
 	}
 
 	if err := root.Execute(); err != nil {
@@ -66,6 +67,9 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newUpdateCommand())
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newContextCommand(root))
+	root.AddCommand(newSkillCommand())
+	root.AddCommand(newLaunchCommand())
+	root.AddCommand(newUninstallCommand())
 	return root
 }
 
