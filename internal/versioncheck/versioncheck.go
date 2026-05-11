@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cenvero/cetus/internal/updater"
@@ -101,5 +102,5 @@ func writeCache(entry cacheEntry) {
 }
 
 func isNewer(latest, current string) bool {
-	return latest != "" && latest != current
+	return latest != "" && strings.TrimPrefix(latest, "v") != strings.TrimPrefix(current, "v")
 }
