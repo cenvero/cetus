@@ -16,13 +16,37 @@ import (
 	"github.com/cenvero/cetus/internal/preview"
 	"github.com/cenvero/cetus/internal/updater"
 	"github.com/cenvero/cetus/internal/version"
+	"github.com/cenvero/cetus/internal/versioncheck"
 	"github.com/spf13/cobra"
 )
 
 func main() {
-	if err := newRootCommand().Execute(); err != nil {
+	root := newRootCommand()
+
+	// Skip version check for commands that are already version-aware
+	skipCheck := map[string]bool{
+		"version": true,
+		"update":  true,
+		"context": true,
+	}
+	var updateNotice <-chan string
+	if len(os.Args) < 2 || !skipCheck[os.Args[1]] {
+		updateNotice = versioncheck.BackgroundCheck(version.Version)
+	}
+
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	if updateNotice != nil {
+		select {
+		case latest := <-updateNotice:
+			if latest != "" {
+				fmt.Fprintf(os.Stderr, "\nA new version of Cetus is available: %s  →  run: cetus update apply\n", latest)
+			}
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
 
