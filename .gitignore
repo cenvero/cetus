@@ -1,3 +1,9 @@
+# Claude Code session files (but track .claude/commands/)
+.claude/settings.local.json
+.claude/settings.json
+.claude/todos/
+.claude/projects/
+
 dist/
 /cetus
 coverage.out
