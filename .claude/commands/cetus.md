@@ -1,6 +1,6 @@
 # Cetus — HTML-to-Video Rendering Assistant
 
-You are an expert Cetus developer. Cetus renders HTML/CSS/JS compositions to video using headless Chrome + ffmpeg. When the user asks you to build, fix, or render a Cetus composition, follow these rules precisely.
+You are an expert Cetus developer. Cetus renders HTML/CSS/JS compositions to video using headless Chrome + ffmpeg. When the user asks you to build, fix, or render a Cetus composition, follow every rule in this document precisely.
 
 $ARGUMENTS
 
@@ -8,57 +8,55 @@ $ARGUMENTS
 
 ## What Cetus Is
 
-Cetus renders an **HTML file** to MP4/WebM by:
-1. Opening it in headless Chrome
-2. Seeking to each frame's timestamp via a JS engine injected into the page
-3. Screenshotting each frame as PNG
-4. Piping all frames into ffmpeg
+Cetus renders an **HTML file** to MP4/WebM video by:
+1. Opening the HTML file in headless Chrome
+2. Injecting a JS seek engine that drives each frame to an exact timestamp
+3. Taking a lossless PNG screenshot per frame
+4. Piping all frames into ffmpeg to produce the final video
 
-The HTML file is the composition. Everything — animations, timing, layout — lives there.
+The HTML file **is** the composition — all animation, layout, and timing lives there.
 
 ---
 
-## The Seek Engine
+## The Seek Engine (How Cetus Renders Frames)
 
-Cetus does NOT record a live playback. It **seeks** to each frame's exact time. Your animations must be **seekable**, not time-based playback.
+Cetus does **NOT** record live playback. It seeks frame-by-frame. Every animation must be **seekable**, not time-based playback.
 
-### How seeking works (in order):
-1. Cetus calls `window.__cetusRenderFrame(frameIndex, fps)` if defined
+### Seek order for each frame:
+1. Calls `window.__cetusRenderFrame(frameIndex, fps)` if defined
 2. Calls `tl.seek(cetusTime, false)` on every timeline in `window.__timelines[]`
-3. Sets clips not active at this time to `display: none`
-4. Calls any functions registered in `window.__cetusFrameHooks[]`
+3. Sets clips not active at this timestamp to `display: none`
+4. Calls functions in `window.__cetusFrameHooks[]`
 5. Waits for all pending `fetch` / `Promise` calls to settle
 6. Waits for fonts and images to load
 7. Takes the screenshot
 
-**Rule:** Every animated element must be driven by a GSAP timeline registered in `window.__timelines`. If it isn't in `window.__timelines`, it will not be seeked — it will be frozen at its CSS initial state in every frame.
+**Rule:** Every animated element must be driven by a GSAP timeline registered in `window.__timelines`. If it's not there, Cetus never seeks it — it's frozen at its CSS initial state in every frame.
 
 ---
 
 ## GSAP Timeline Rules (CRITICAL)
 
 ```js
-// 1. Always use absolute time (position parameter), never relative +=
-tl.to(el, { opacity: 1, duration: 0.5 }, 1.0)  // starts at 1.0s — correct
-tl.to(el, { opacity: 1, duration: 0.5 }, "+=1") // WRONG — breaks seek
+// 1. Always use absolute time (position parameter), never relative offsets
+tl.to(el, { opacity: 1, duration: 0.5 }, 1.0)   // starts at 1.0s — CORRECT
+tl.to(el, { opacity: 1, duration: 0.5 }, "+=1")  // WRONG — breaks seek
 
 // 2. Register every timeline
 window.__timelines = window.__timelines || [];
 window.__timelines.push(tl);
 
 // 3. CRITICAL: pin the timeline to the full composition duration
-// Without this, GSAP ends the timeline early and all elements freeze at their final state
-const duration = 10; // must match composition duration in seconds
-tl.set({}, {}, duration); // empty tween at t=duration keeps timeline alive
+// Without this, GSAP ends the timeline early and ALL elements freeze at their final state
+const DURATION = 10; // must equal totalFrames / fps
+tl.set({}, {}, DURATION); // empty tween at t=DURATION keeps timeline alive
 
-// 4. Do not autoplay timelines — Cetus seeks them, not plays them
+// 4. Always create timelines paused — Cetus seeks them, never plays them
 const tl = gsap.timeline({ paused: true });
 
-// 5. Never use CSS transitions or CSS animations for anything that must be seekable
-// Use GSAP only
+// 5. Never use CSS transitions or @keyframes on seekable elements — use GSAP only
 
-// 6. For clips (elements that appear/disappear), set display:none in CSS by default,
-// then use GSAP to show them. Cetus sets display:none on inactive clips automatically.
+// 6. Default clips to display:none, show them with GSAP at the right time
 ```
 
 ### Full minimal composition template:
@@ -68,6 +66,10 @@ const tl = gsap.timeline({ paused: true });
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="cetus:fps" content="30">
+  <meta name="cetus:width" content="1920">
+  <meta name="cetus:height" content="1080">
+  <meta name="cetus:totalFrames" content="300">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -80,19 +82,19 @@ const tl = gsap.timeline({ paused: true });
 
   <script>
     const FPS = 30;
-    const DURATION = 10; // seconds — must match cetus.json or HTML meta
+    const DURATION = 10; // seconds — totalFrames / fps
 
     window.__timelines = [];
 
     const tl = gsap.timeline({ paused: true });
 
-    // Show title from 1s to 4s
+    // Show title 1s–4s
     tl.set('#title', { display: 'block' }, 1.0)
     tl.from('#title', { opacity: 0, duration: 0.5 }, 1.0)
     tl.to('#title', { opacity: 0, duration: 0.5 }, 3.5)
     tl.set('#title', { display: 'none' }, 4.0)
 
-    // CRITICAL: pin timeline to full duration
+    // CRITICAL: pin timeline to full duration or all elements freeze at final state
     tl.set({}, {}, DURATION);
 
     window.__timelines.push(tl);
@@ -103,10 +105,11 @@ const tl = gsap.timeline({ paused: true });
 
 ---
 
-## Composition Config (cetus.json or HTML meta tags)
+## Composition Config
 
-Cetus reads composition settings from a sidecar `cetus.json` or `<meta>` tags in the HTML:
+Cetus reads settings from a sidecar `cetus.json` **or** `<meta>` tags in the HTML.
 
+**cetus.json:**
 ```json
 {
   "id": "my-composition",
@@ -117,7 +120,7 @@ Cetus reads composition settings from a sidecar `cetus.json` or `<meta>` tags in
 }
 ```
 
-Or in HTML:
+**HTML meta tags (equivalent):**
 ```html
 <meta name="cetus:fps" content="30">
 <meta name="cetus:width" content="1920">
@@ -125,7 +128,7 @@ Or in HTML:
 <meta name="cetus:totalFrames" content="300">
 ```
 
-`totalFrames` = `fps × durationSeconds`. For 10s at 30fps: `totalFrames = 300`.
+`totalFrames` = `fps × durationSeconds`. Example: 10s at 30fps = 300 frames.
 
 ---
 
@@ -135,46 +138,61 @@ Or in HTML:
 ```bash
 cetus render cetus.html -o output.mp4
 
-# Full flags:
+# All flags:
 cetus render cetus.html -o output.mp4 \
-  --fps 30 \
-  --width 1920 --height 1080 \
+  --fps 30 \                   # frames per second (default 30)
+  --width 1920 \               # override composition width
+  --height 1080 \              # override composition height
   --format mp4 \               # mp4 (default) or webm
-  --quality 18 \               # CRF: lower = better quality, larger file
-  --scale 1080p \              # resize output: 480p, 720p, 1080p, 4k, or WxH
-  --frames-dir .cetus-frames \ # cache PNGs to disk (required for --concurrency > 1)
-  --concurrency 4 \            # parallel Chrome workers (requires --frames-dir)
-  --resume \                   # skip already-captured frames (requires --frames-dir)
-  --no-gpu \                   # disable Chrome GPU
-  --timeout 300 \              # max seconds before abort
-  --keep-frames \              # don't delete frame cache after encode
-  --audio track.mp3 \          # mux audio
-  --audio-volume 0.8 \         # 0.0–1.0
-  --audio-loop \               # loop audio to match duration
-  --audio-start 2.5 \          # delay audio by N seconds
-  --audio-fade-in 1.0 \        # fade in duration
-  --audio-fade-out 2.0 \       # fade out duration
-  --subtitles subs.srt         # burn in subtitles (SRT or ASS)
+  --quality 18 \               # CRF: lower = better quality, larger file (0 = codec default)
+  --scale 1080p \              # resize: 480p, 720p, 1080p, 4k, or WxH (e.g. 1920x1080)
+  --frames-dir .cetus-frames \ # cache PNG frames to disk (required for --concurrency > 1)
+  --concurrency 4 \            # parallel Chrome workers (requires --frames-dir or --resume)
+  --resume \                   # skip already-captured frames; defaults dir to .cetus-frames
+  --keep-frames \              # keep frame cache after encode
+  --no-gpu \                   # disable Chrome GPU acceleration
+  --timeout 300 \              # max seconds before abort (0 = no limit)
+  --audio track.mp3 \          # mux audio into output
+  --audio-volume 0.8 \         # volume 0.0–1.0 (default 1.0)
+  --audio-loop \               # loop audio to match video duration
+  --audio-start 2.5 \          # delay audio start by N seconds on timeline
+  --audio-fade-in 1.0 \        # fade-in duration in seconds
+  --audio-fade-out 2.0 \       # fade-out duration in seconds
+  --subtitles subs.srt \       # burn in subtitles (SRT or ASS)
+  --progress-format text       # progress output: text (default) or json
 ```
 
-### `cetus encode` — encode cached PNG frames to video (no Chrome)
+### `cetus encode` — encode cached PNG frames to video (no Chrome needed)
 ```bash
-# Use this after frames are already on disk
 cetus encode .cetus-frames -o output.mp4
 
-# Full flags (same audio/quality/scale/subtitle flags as render):
-cetus encode .cetus-frames -o output.mp4 \
-  --fps 30 \
-  --format mp4 \
-  --quality 18 \
-  --scale 1080p \
-  --audio track.mp3 \
+# Can output multiple formats at once:
+cetus encode .cetus-frames -o output.mp4 -o output.webm
+
+# All flags:
+cetus encode .cetus-frames \
+  -o output.mp4 \              # output path; repeat for multiple outputs
+  --fps 30 \                   # override FPS from frame cache
+  --format mp4 \               # mp4 or webm (defaults from file extension)
+  --quality 18 \               # CRF quality (0 = codec default)
+  --scale 1080p \              # resize output
+  --thumbnail 5s \             # extract single frame as image instead of encoding video
+  --keep-frames \              # keep frame cache after encoding
+  --timeout 120 \              # max encode seconds
+  --audio track.mp3 \          # mux audio
   --audio-volume 0.8 \
   --audio-loop \
   --audio-start 2.5 \
   --audio-fade-in 1.0 \
   --audio-fade-out 2.0 \
-  --subtitles subs.srt
+  --subtitles subs.srt \
+  --progress-format text       # text or json
+```
+
+**`--thumbnail`:** Instead of encoding a video, extract one frame as an image:
+```bash
+cetus encode .cetus-frames --thumbnail 5s -o thumb.jpg
+cetus encode .cetus-frames --thumbnail 1:30 -o thumb.png
 ```
 
 ### `cetus seek` — render a single frame to PNG
@@ -182,53 +200,102 @@ cetus encode .cetus-frames -o output.mp4 \
 cetus seek cetus.html --at 5s -o frame.png
 
 # Flags:
---at 5s          # timestamp: 5s, 1:30, 01:02:30
--o frame.png     # output file (required)
---fps 30         # override FPS
---width / --height
---no-gpu
---timeout 30
+--at 5s           # timestamp: 5s, 1:30, 01:02:30, or plain seconds like 5.5
+-o frame.png      # output PNG (required)
+--fps 30          # override FPS
+--width 1920      # override width
+--height 1080     # override height
+--no-gpu          # disable GPU
+--timeout 30      # max seconds
 ```
 
-### `cetus watch` — re-render on file change
+Use `cetus seek` to inspect any frame without rendering the full video. Essential for debugging.
+
+### `cetus watch` — re-render automatically on file change
 ```bash
 cetus watch cetus.html -o preview.mp4
 
-# Same flags as render except --resume (watch always renders fresh)
-# Press Ctrl+C to stop
+# Flags: same as render except no --resume (watch always renders fresh)
+# Press Ctrl+C to stop watching
+
+cetus watch cetus.html -o preview.mp4 \
+  --frames-dir .watch-frames \
+  --concurrency 2 \
+  --quality 28 \
+  --progress-format json
 ```
+
+Watches the entire directory containing the HTML file. Re-renders after a 300ms debounce when any file changes.
 
 ### `cetus preview` — live browser preview
 ```bash
 cetus preview cetus.html
 cetus preview cetus.html --port 3000 --no-open
 
-# NOTE: preview shows t=0 state only. It does NOT run the seek engine.
-# Use `cetus seek` to check what a specific frame looks like.
+# Flags:
+--port 3000    # port to listen on (default: random)
+--no-open      # don't auto-open the browser
+```
+
+**Important:** `cetus preview` shows only the **t=0 state** of the composition. It does NOT run the seek engine. Use `cetus seek` to check what a specific frame looks like during a render.
+
+### `cetus validate` — validate a composition before rendering
+```bash
+cetus validate cetus.html
+```
+
+Parses the composition and reports errors and warnings (missing config, invalid frame counts, etc.). Always run this before a long render if you're unsure about the composition.
+
+Output example:
+```
+Composition "my-comp": 1920x1080, 10.00s at 30 fps (300 frames, 5 clips)
+warning: clip "title" has no timeline registered
+Validation passed with 1 warning(s)
+```
+
+Exit code is non-zero on errors; zero on warnings-only or clean.
+
+### `cetus update` — update Cetus
+```bash
+cetus update check              # check if a newer version is available
+cetus update apply              # download and install the latest release
+cetus update apply --force      # apply even if already up to date
+
+# Flags (both check and apply):
+--channel stable    # auto (default), stable, beta, or rc
+--manifest-url URL  # custom release manifest URL
+```
+
+If Cetus was installed via Homebrew, these commands print `brew update && brew upgrade cenvero-cetus` instead.
+
+### `cetus version` — print version
+```bash
+cetus version
 ```
 
 ---
 
 ## Quality Guide
 
-| Goal | CRF | Command |
-|------|-----|---------|
-| Highest quality (mastering) | 0–16 | `--quality 16` |
-| High quality (default for delivery) | 18–22 | `--quality 18` |
-| Balanced (smaller file) | 23–28 | `--quality 26` |
-| Draft / preview | 30+ | `--quality 32` |
+| Goal | `--quality` CRF | Notes |
+|------|-----------------|-------|
+| Lossless / archival | `0` | Very large file |
+| Mastering / highest quality | `16` | Large file, excellent quality |
+| High quality delivery | `18–22` | Recommended for final renders |
+| Balanced / smaller file | `23–28` | Good for previews |
+| Draft / fast preview | `30+` | Small file, lower quality |
 
-- For **4K output**: use `--scale 4k` (or `--scale 3840x2160`) and `--quality 16`
-- For **lossless**: `--quality 0` (very large file)
-- For **WebM/VP9**: use `--format webm --quality 30` (VP9 CRF scale is different from H.264)
+- **4K output:** `--scale 4k --quality 16`
+- **WebM/VP9:** `--format webm` — VP9 CRF scale differs from H.264; `30` is VP9's balanced default
+- **Codec default:** `--quality 0` (omit flag) — uses libx264/libvpx-vp9 defaults
 
 ---
 
 ## Resume Workflow (for long renders)
 
-Use `--frames-dir` + `--resume` to safely pause and continue a long render:
+For compositions with 300+ frames, always use `--frames-dir` + `--resume` so you can recover from interruptions.
 
-**Step 1 — Start with frames cache:**
+**Step 1 — Render with frame cache:**
 ```bash
 cetus render cetus.html -o output.mp4 --frames-dir .cetus-frames --concurrency 2
 ```
@@ -239,40 +306,40 @@ cetus render cetus.html -o output.mp4 --frames-dir .cetus-frames --resume --conc
 ```
 Already-captured frames are skipped instantly. Only missing frames are re-rendered.
 
-**Step 3 — Encode only (if frames are complete):**
+**Step 3 — Encode only (when all frames are captured):**
 ```bash
 cetus encode .cetus-frames -o output.mp4
 ```
 
-### When to use `--frames-dir`:
-- Composition has 300+ frames (10s at 30fps)
-- You want `--concurrency > 1` (required for parallel workers)
-- You want to be able to resume if something fails
-- You want to re-encode with different quality/audio without re-rendering
+### When to always use `--frames-dir`:
+| Frames | Action |
+|--------|--------|
+| < 300 (< 10s at 30fps) | Direct render, no `--frames-dir` needed |
+| 300–599 | Use `--frames-dir`; `--concurrency 1` or `2` |
+| 600+ | Use `--frames-dir --concurrency 2` (strongly recommended) |
 
-### Concurrency guide:
-- Under 300 frames: `--concurrency 1` (default, no flag needed)
-- 300–599 frames: `--concurrency 1` or `2`
-- 600+ frames: `--concurrency 2` recommended
-- Adjust based on available CPU cores; each worker opens a Chrome instance
+`--concurrency` requires `--frames-dir`. Each worker opens a separate Chrome instance; tune to your CPU core count.
 
 ---
 
-## Common Mistakes to Avoid
+## Common Mistakes
 
-1. **Relative GSAP positions** (`+=1`, `<`, `-=0.5`) — break seeking, use absolute seconds
-2. **Missing `tl.set({},{},DURATION)`** — timeline ends early, all elements freeze at final state
-3. **Not pushing to `window.__timelines`** — timeline is never seeked
+1. **Relative GSAP positions** (`+=1`, `<`, `-=0.5`) — break seeking; use absolute seconds always
+2. **Missing `tl.set({},{},DURATION)`** — timeline ends early, all elements freeze at final state for remaining frames
+3. **Not pushing to `window.__timelines`** — Cetus never seeks the timeline
 4. **CSS `transition` or `@keyframes`** on seekable elements — CSS animations don't respond to JS seek
-5. **`autoplay: true` or no `paused: true`** on timeline — causes flicker artifacts in frames
-6. **`totalFrames` mismatch** — if meta says 300 frames but animation ends at frame 200, last 100 frames are static
+5. **No `paused: true`** on timeline — causes frame capture artifacts
+6. **`totalFrames` mismatch** — if meta says 300 frames but animation ends at frame 200, last 100 frames render as frozen final state
+7. **`cetus preview` for checking specific frames** — preview only shows t=0; use `cetus seek` instead
 
 ---
 
-## Debugging
+## Debugging Checklist
 
-- Use `cetus seek cetus.html --at 2s -o check.png` to inspect any frame without a full render
-- If a frame looks wrong, check: is the element in a registered `window.__timelines`?
-- Black screen = no timelines registered OR all elements `display:none` with no seek engine to show them
-- Frozen frame = timeline ended before this timestamp (missing `tl.set({},{},DURATION)`)
-- Element invisible = check `display:none` default + GSAP `set({display:'block'})` at the right time
+- `cetus validate cetus.html` — check for errors before starting a long render
+- `cetus seek cetus.html --at 2s -o check.png` — inspect any frame without full render
+- Black screen → no timelines registered, or all elements `display:none` with no GSAP to show them
+- Frozen frame → timeline ended before this timestamp; add `tl.set({},{},DURATION)`
+- Element invisible → check default `display:none` + `tl.set({display:'block'}, startTime)` in timeline
+- Wrong timing → check all positions are absolute seconds, not relative offsets
+- Render stopped → use `--resume` to continue from where it left off
