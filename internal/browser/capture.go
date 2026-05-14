@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"regexp"
@@ -58,6 +59,9 @@ func (b *Browser) CaptureWithOptions(ctx context.Context, composition *compose.C
 	cache, err := newFrameCache(opts, composition)
 	if err != nil {
 		return err
+	}
+	if cache != nil {
+		defer func() { _ = cache.close() }()
 	}
 
 	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
@@ -122,6 +126,7 @@ func CaptureFramesToCache(ctx context.Context, composition *compose.Composition,
 	if cache == nil {
 		return fmt.Errorf("frame cache is required")
 	}
+	defer func() { _ = cache.close() }()
 
 	workers := effectiveCaptureWorkers(opts.Workers, composition.TotalFrames)
 	ctx, cancel := context.WithCancel(ctx)
@@ -223,6 +228,7 @@ func EncodeCachedFrames(composition *compose.Composition, enc *encoder.Encoder, 
 	if cache == nil {
 		return fmt.Errorf("frame cache is required")
 	}
+	defer func() { _ = cache.close() }()
 
 	reportCaptureProgress(progress, 0, composition.TotalFrames, 0)
 	for frame := 0; frame < composition.TotalFrames; frame++ {
@@ -288,8 +294,7 @@ func ReadCachedFrame(dir string, frame int) ([]byte, bool, error) {
 }
 
 func frameCached(cache *frameCache, frame int) (bool, error) {
-	_, ok, err := cache.read(frame)
-	return ok, err
+	return cache.exists(frame)
 }
 
 func (b *Browser) captureFrameToCache(frame int, composition *compose.Composition, cache *frameCache) error {
@@ -649,8 +654,11 @@ func buildSeekScript(frame, fps int) string {
 }
 
 type frameCache struct {
-	dir    string
-	resume bool
+	dir      string
+	resume   bool
+	root     *os.Root
+	closeMu  sync.Once
+	closeErr error
 }
 
 type frameCacheManifest struct {
@@ -691,7 +699,12 @@ func newFrameCache(opts CaptureOptions, composition *compose.Composition) (*fram
 		return nil, err
 	}
 
-	return &frameCache{dir: dir, resume: opts.Resume}, nil
+	root, err := openFrameCacheRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return &frameCache{dir: dir, resume: opts.Resume, root: root}, nil
 }
 
 func manifestForComposition(composition *compose.Composition) frameCacheManifest {
@@ -814,13 +827,10 @@ func clearFrameCache(dir string) error {
 }
 
 func (c *frameCache) read(frame int) ([]byte, bool, error) {
-	root, err := openFrameCacheRoot(c.dir)
-	if err != nil {
-		return nil, false, err
+	if c == nil || c.root == nil {
+		return nil, false, fmt.Errorf("frame cache is closed")
 	}
-	defer root.Close()
-
-	data, err := root.ReadFile(frameFileName(frame))
+	data, err := c.root.ReadFile(frameFileName(frame))
 	if os.IsNotExist(err) {
 		return nil, false, nil
 	}
@@ -833,26 +843,60 @@ func (c *frameCache) read(frame int) ([]byte, bool, error) {
 	return data, true, nil
 }
 
+func (c *frameCache) exists(frame int) (bool, error) {
+	if c == nil || c.root == nil {
+		return false, fmt.Errorf("frame cache is closed")
+	}
+	file, err := c.root.Open(frameFileName(frame))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	var header [8]byte
+	if _, err := io.ReadFull(file, header[:]); err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return false, nil
+		}
+		return false, err
+	}
+	return isValidPNGData(header[:]), nil
+}
+
 func (c *frameCache) write(frame int, data []byte) error {
 	if len(data) == 0 {
 		return fmt.Errorf("frame data is empty")
 	}
-	root, err := openFrameCacheRoot(c.dir)
-	if err != nil {
-		return err
+	if c == nil || c.root == nil {
+		return fmt.Errorf("frame cache is closed")
 	}
-	defer root.Close()
 
 	name := frameFileName(frame)
 	tmpName := name + ".tmp"
-	if err := root.WriteFile(tmpName, data, 0o600); err != nil {
+	if err := c.root.WriteFile(tmpName, data, 0o600); err != nil {
 		return err
 	}
-	if err := root.Rename(tmpName, name); err != nil {
-		_ = root.Remove(tmpName)
+	if err := c.root.Rename(tmpName, name); err != nil {
+		_ = c.root.Remove(tmpName)
 		return err
 	}
 	return nil
+}
+
+func (c *frameCache) close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeMu.Do(func() {
+		if c.root != nil {
+			c.closeErr = c.root.Close()
+			c.root = nil
+		}
+	})
+	return c.closeErr
 }
 
 func openFrameCacheRoot(dir string) (*os.Root, error) {
