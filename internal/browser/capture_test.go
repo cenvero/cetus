@@ -23,6 +23,7 @@ func TestFrameCacheWritesReadsAndValidatesManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newFrameCache returned error: %v", err)
 	}
+	defer func() { _ = cache.close() }()
 	pngData := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
 	if err := cache.write(3, pngData); err != nil {
 		t.Fatalf("write returned error: %v", err)
@@ -32,6 +33,7 @@ func TestFrameCacheWritesReadsAndValidatesManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resume newFrameCache returned error: %v", err)
 	}
+	defer func() { _ = resumeCache.close() }()
 	got, ok, err := resumeCache.read(3)
 	if err != nil {
 		t.Fatalf("read returned error: %v", err)
@@ -42,7 +44,8 @@ func TestFrameCacheWritesReadsAndValidatesManifest(t *testing.T) {
 
 	mismatched := *comp
 	mismatched.Width = 1280
-	if _, err := newFrameCache(CaptureOptions{FramesDir: dir, Resume: true}, &mismatched); err == nil {
+	if mismatchedCache, err := newFrameCache(CaptureOptions{FramesDir: dir, Resume: true}, &mismatched); err == nil {
+		_ = mismatchedCache.close()
 		t.Fatal("newFrameCache accepted mismatched manifest")
 	}
 }
@@ -66,14 +69,56 @@ func TestFrameCacheClearsOldFramesWhenNotResuming(t *testing.T) {
 		t.Fatalf("write keep file: %v", err)
 	}
 
-	if _, err := newFrameCache(CaptureOptions{FramesDir: dir}, comp); err != nil {
+	cache, err := newFrameCache(CaptureOptions{FramesDir: dir}, comp)
+	if err != nil {
 		t.Fatalf("newFrameCache returned error: %v", err)
 	}
+	defer func() { _ = cache.close() }()
 	if _, err := os.Stat(oldFrame); !os.IsNotExist(err) {
 		t.Fatalf("old frame still exists, stat error: %v", err)
 	}
 	if _, err := os.Stat(keepFile); err != nil {
 		t.Fatalf("non-frame file was removed: %v", err)
+	}
+}
+
+func TestFrameCacheExistsValidatesPNGHeader(t *testing.T) {
+	dir := t.TempDir()
+	comp := &compose.Composition{
+		ID:          "intro",
+		Width:       640,
+		Height:      360,
+		FPS:         30,
+		Duration:    1,
+		TotalFrames: 30,
+	}
+	cache, err := newFrameCache(CaptureOptions{FramesDir: dir}, comp)
+	if err != nil {
+		t.Fatalf("newFrameCache returned error: %v", err)
+	}
+	defer func() { _ = cache.close() }()
+
+	validPNG := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	if err := cache.write(3, validPNG); err != nil {
+		t.Fatalf("write returned error: %v", err)
+	}
+	ok, err := cache.exists(3)
+	if err != nil {
+		t.Fatalf("exists returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("exists returned false for valid PNG")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, frameFileName(4)), []byte("not png"), 0o600); err != nil {
+		t.Fatalf("write invalid frame: %v", err)
+	}
+	ok, err = cache.exists(4)
+	if err != nil {
+		t.Fatalf("exists returned error for invalid PNG: %v", err)
+	}
+	if ok {
+		t.Fatal("exists returned true for invalid PNG")
 	}
 }
 
